@@ -81,168 +81,18 @@ export default function Home() {
 
   // Audio / Speech State
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(102); // 01:42 initial demo display
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [responseText, setResponseText] = useState(
-    'In architecting this transformation, the first pillar is establishing an event-driven abstraction layer over legacy OSS/BSS protocols like CORBA and legacy SNMP. We deployed Kafka as the unified streaming bus paired with eBPF-based telemetry for sub-millisecond observability. To enforce 99.999% uptime, we partitioned workloads into stateless microservices backed by active-active CockroachDB clusters with zero shared state...'
-  );
+  const [responseText, setResponseText] = useState('');
 
   // Speech Metrics State
-  const [speechMetrics, setSpeechMetrics] = useState<SpeechMetrics>({
-    durationSeconds: 102,
-    wordCount: 78,
-    wordsPerMinute: 134,
-    fillerWordCount: 2,
-    fillerWordsDetected: [
-      { word: 'like', count: 1 },
-      { word: 'basically', count: 1 }
-    ],
-    pacingAssessment: 'Optimal Pace'
-  });
+  const [speechMetrics, setSpeechMetrics] = useState<SpeechMetrics | null>(null);
 
   // Evaluation & Agents State
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [evaluationFeedback, setEvaluationFeedback] = useState<CoachingFeedback | null>({
-    overallScore: 92,
-    verdict: 'Ready for Next Stage',
-    rubricScores: {
-      relevance: 96,
-      clarity: 91,
-      responseStructure: 88,
-      completeness: 94,
-      communicationQuality: 92
-    },
-    strengths: [
-      'Identified CORBA/SNMP protocol bottlenecks accurately',
-      'Leveraged eBPF for in-kernel latency telemetry without agent overhead',
-      'Specified CockroachDB active-active cluster to uphold 5-nines availability'
-    ],
-    areasForImprovement: [
-      'Transition from technical minutiae to financial business yield faster',
-      'Anchor initial 30 seconds with executive ROI metrics before architectural mechanics'
-    ],
-    starBreakdown: {
-      situation: {
-        present: true,
-        score: 94,
-        critique: 'Legacy BSS/OSS bottlenecking 5G service turn-around time to 14 days under legacy constraints.'
-      },
-      task: {
-        present: true,
-        score: 92,
-        critique: 'Architect zero-touch automated provisioning with absolute 99.999% SLA during peak load.'
-      },
-      action: {
-        present: true,
-        score: 95,
-        critique: 'Implemented Kafka streaming, eBPF telemetry, and multi-region canary rollout policies.'
-      },
-      result: {
-        present: true,
-        score: 96,
-        quantifiable: true,
-        critique: 'Cut provisioning turnaround from 14 days to 4 minutes; 0 outage incidents reported in 18 months.'
-      },
-      overallStarScore: 94
-    },
-    communicationAnalysis: {
-      clarityScore: 91,
-      concisenessScore: 88,
-      tone: 'Professional & Confident',
-      communicationQualityScore: 92,
-      strengths: ['Steady boardroom pacing', 'Decisive vocal cadence'],
-      fillerWordCritique: '2 minimal verbal crutches detected (<1% of word count).',
-      pacingCritique: 'Speaking pace was stable at 134 WPM (Optimal Pace).'
-    },
-    contentEvaluation: {
-      relevanceScore: 96,
-      technicalDepthScore: 94,
-      accuracyScore: 95,
-      completenessScore: 94,
-      demonstratedCompetencies: ['TMF ODA Architecture', 'Kafka Event Backbone', 'Carrier-Grade 5-Nines Resiliency'],
-      missedKeyPoints: ['Elaborate on CAP theorem tradeoffs under WAN partition'],
-      groundedEvidenceQuotes: [
-        '"We deployed Kafka as the unified streaming bus paired with eBPF-based telemetry..."',
-        '"partitioned workloads into stateless microservices backed by active-active CockroachDB..."'
-      ]
-    },
-    improvedModelAnswer:
-      'To reconcile modernization with five-nines availability, we enforce an anti-corruption adapter pattern. Incoming legacy protocols terminate at high-throughput ingress proxies that publish directly to an event backbone. This enables idempotent replayability if downstream microservices encounter transient failures during rolling upgrades.',
-    answerRewriteGuidance: [
-      'Open directly with business SLA preservation before deep-diving into microservices',
-      'Highlight TMF 642 / 622 standard compliance to assure telco client executives',
-      'Tie CockroachDB multi-region replication to quantifiable zero-downtime outcomes'
-    ],
-    adaptiveFollowUpQuestion: {
-      question: 'How would you justify the 30% upfront infrastructure cost of Kafka and eBPF to a skeptical Telco CFO?',
-      intent: 'Probe commercial acumen, ROI calculation, and executive stakeholder persuasion.',
-      probingArea: 'Executive Financial Defense & ROI Justification'
-    },
-    personalizedImprovementPlan: {
-      immediateFix: 'State the final ROI within the first 20 seconds of your answer.',
-      mediumTermPractice: 'Practice answering with the Executive Pyramid Principle (Answer First, followed by Supporting Pillars).',
-      recommendedFramework: 'Pyramid Principle + STAR'
-    },
-    curatedResources: [
-      {
-        topic: 'FastAPI & Async Concurrency',
-        type: 'video',
-        title: 'FastAPI Production Architecture: Async Event Loops & Concurrency Limits',
-        url: 'https://www.youtube.com/results?search_query=fastapi+async+event+loop+concurrency+crash+course',
-        provider: 'YouTube',
-        estimatedTime: '15 mins',
-        reason: 'Recommended for strengthening non-blocking I/O event dispatch and thread pool tuning.'
-      },
-      {
-        topic: 'Kafka Event Streaming for Telcos',
-        type: 'video',
-        title: 'Kafka Architecture Masterclass: Partitioning, Replication & 5-Nines SLA',
-        url: 'https://www.youtube.com/results?search_query=kafka+event+streaming+distributed+systems+architecture',
-        provider: 'YouTube',
-        estimatedTime: '22 mins',
-        reason: 'Directly addresses carrier-grade event backbone decoupling from legacy OSS/BSS.'
-      },
-      {
-        topic: 'STAR Quantifiable ROI for Executives',
-        type: 'tutorial',
-        title: 'Mastering the Result in STAR: Translating Technical Refactoring to EBITDA',
-        url: 'https://www.youtube.com/results?search_query=STAR+interview+quantifiable+business+impact+engineering',
-        provider: 'Prodapt Academy',
-        estimatedTime: '12 mins',
-        reason: 'Helps articulate the 30% upfront infrastructure ROI to skeptical CFOs.'
-      }
-    ],
-    recurringGapsIdentified: ['Opportunity to introduce C-level financial framing earlier']
-  });
-
-  const [agentTraces, setAgentTraces] = useState<AgentTraceMessage[]>([
-    {
-      agentName: 'Content Evaluation Agent',
-      stage: 'complete',
-      timestamp: new Date().toISOString(),
-      latencyMs: 840,
-      summary: 'Evaluated against ETSI/NFV standards and TM Forum Open Digital Architecture. Candidate accurately prioritized network slicing protection over naive microservice scaling.',
-      details: { model: 'GPT-4o', score: 95 }
-    },
-    {
-      agentName: 'Interview Coach Agent',
-      stage: 'complete',
-      timestamp: new Date().toISOString(),
-      latencyMs: 920,
-      summary: 'Structured narrative tightly along STAR. Recommended transitioning from technical minutiae to C-suite financial yield faster in early sentences.',
-      details: { model: 'GPT-4o', score: 91 }
-    },
-    {
-      agentName: 'Communication Analysis Agent',
-      stage: 'complete',
-      timestamp: new Date().toISOString(),
-      latencyMs: 340,
-      summary: 'Zero disruptive pause patterns. Vocal pace stabilized at 134 WPM indicating steady executive authority. Pitch variance within optimum band.',
-      details: { model: 'Acoustic-NLP', score: 94 }
-    }
-  ]);
-
-  const [modelUsed, setModelUsed] = useState<string>('OpenAI GPT-4o + Specialist Multi-Agent Pipeline');
+  const [evaluationFeedback, setEvaluationFeedback] = useState<CoachingFeedback | null>(null);
+  const [agentTraces, setAgentTraces] = useState<AgentTraceMessage[]>([]);
+  const [modelUsed, setModelUsed] = useState<string>('Prodapt AI Specialist Pipeline');
   const [isSpeakingCoach, setIsSpeakingCoach] = useState(false);
   const [apiKey, setApiKey] = useState('');
 
@@ -693,18 +543,20 @@ export default function Home() {
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Speaking Rate:</span>
               <span className="font-bold text-emerald-600">
-                {speechMetrics.wordsPerMinute} WPM • {speechMetrics.pacingAssessment}
+                {speechMetrics ? `${speechMetrics.wordsPerMinute} WPM • ${speechMetrics.pacingAssessment}` : '0 WPM • Standby'}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Filler Artifacts:</span>
               <span className="font-bold text-blue-600">
-                {speechMetrics.fillerWordCount} Detected (&lt;1%)
+                {speechMetrics ? `${speechMetrics.fillerWordCount} Detected` : '0 Detected'}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
               <span className="text-slate-500 font-medium">Prosodic Cadence:</span>
-              <span className="font-bold text-purple-600">94% High Confidence</span>
+              <span className="font-bold text-purple-600">
+                {speechMetrics ? 'Calibrated' : 'Awaiting Voice Input'}
+              </span>
             </div>
           </div>
 
@@ -798,8 +650,8 @@ export default function Home() {
         {/* ======================================================== */}
         {/* 4. EXECUTIVE EVALUATION & AI COACH FEEDBACK              */}
         {/* ======================================================== */}
-        {evaluationFeedback && (
-          <section className="pro-card p-6 sm:p-8 rounded-2xl bg-white space-y-8">
+        {evaluationFeedback ? (
+          <section className="pro-card p-6 sm:p-8 rounded-2xl bg-white space-y-8 animate-in fade-in duration-300">
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
@@ -1104,6 +956,34 @@ export default function Home() {
               </div>
             )}
           </section>
+        ) : (
+          <section className="p-8 sm:p-12 rounded-2xl border-2 border-dashed border-slate-200 bg-white/70 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-xs">
+              <BrainCircuit className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">
+              Evaluation Standby — Awaiting Candidate Response
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+              Dictate your answer using the microphone or type directly into the streaming buffer above. Then click <strong className="text-slate-800">"Evaluate My Answer"</strong> to trigger the 5-Agent deliberative analysis.
+            </p>
+            <div className="pt-2 flex items-center justify-center gap-2 text-xs text-slate-500">
+              <span>Quick Test:</span>
+              <button
+                onClick={() => setResponseText(currentQuestion.idealStarResponse || '')}
+                className="text-blue-600 font-semibold hover:underline"
+              >
+                Load Ideal STAR Answer
+              </button>
+              <span>•</span>
+              <button
+                onClick={() => setResponseText(currentQuestion.weakResponseExample || '')}
+                className="text-amber-600 font-semibold hover:underline"
+              >
+                Load Weak Answer
+              </button>
+            </div>
+          </section>
         )}
 
         {/* ======================================================== */}
@@ -1146,24 +1026,30 @@ export default function Home() {
 
           {/* Collapsible Agent Cards */}
           {isInspectorOpen && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-              {agentTraces.map((trace, idx) => (
-                <div key={idx} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900">{trace.agentName}</span>
-                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">
-                      {(trace.details as any)?.score || 92}/100
-                    </span>
+            agentTraces.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                {agentTraces.map((trace, idx) => (
+                  <div key={idx} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900">{trace.agentName}</span>
+                      <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">
+                        {(trace.details as any)?.score || 92}/100
+                      </span>
+                    </div>
+                    <p className="text-slate-600 leading-relaxed text-[11px]">
+                      {trace.summary}
+                    </p>
+                    <div className="text-[10px] text-slate-400 font-mono pt-1">
+                      Latency: {trace.latencyMs}ms • Model: {(trace.details as any)?.model || 'GPT-4o'}
+                    </div>
                   </div>
-                  <p className="text-slate-600 leading-relaxed text-[11px]">
-                    {trace.summary}
-                  </p>
-                  <div className="text-[10px] text-slate-400 font-mono pt-1">
-                    Latency: {trace.latencyMs}ms • Model: {(trace.details as any)?.model || 'GPT-4o'}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-5 rounded-xl bg-slate-50/70 border border-slate-200 text-center text-xs text-slate-500">
+                Awaiting response submission to trigger the 5 Specialist Agents (Telco Domain, Executive Coach, Vocal &amp; Cadence AI).
+              </div>
+            )
           )}
 
           {/* Benchmark Results Display (if triggered) */}
