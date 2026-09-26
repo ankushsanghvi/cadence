@@ -170,6 +170,39 @@ export function runOfflineMultiAgentAnalysis(
       mediumTermPractice: 'Structure all behavioral and scenario responses with a crisp 4-part framework: Context (15%), Ownership/Task (15%), Action Details (50%), Quantifiable Impact (20%).',
       recommendedFramework: question.questionType === 'Behavioral' ? 'STAR (Situation, Task, Action, Result)' : 'PREP (Point, Reason, Example, Point)'
     },
+    curatedResources: [
+      {
+        topic: question.competency,
+        type: 'video',
+        title: `${question.competency} — Architecture Deep Dive & Interview Guide`,
+        url: `https://www.youtube.com/results?search_query=${encodeURIComponent(question.competency + ' interview architecture system design')}`,
+        provider: 'YouTube',
+        estimatedTime: '18 mins',
+        reason: `Targeted review for your missed architectural points: ${contentFeedback.missedKeyPoints[0] || 'Edge-case resiliency'}.`
+      },
+      {
+        topic: question.questionType === 'Behavioral' ? 'STAR Methodology' : 'Distributed Systems Resilience',
+        type: 'tutorial',
+        title: question.questionType === 'Behavioral' 
+          ? 'Quantifying Engineering Impact: The Senior Engineer STAR Playbook'
+          : 'High-Throughput Event Streaming & 5-Nines High Availability',
+        url: question.questionType === 'Behavioral'
+          ? 'https://www.youtube.com/results?search_query=STAR+method+engineering+interview+quantifiable+results'
+          : 'https://www.youtube.com/results?search_query=distributed+systems+event+driven+architecture+kafka+ebpf',
+        provider: 'YouTube',
+        estimatedTime: '14 mins',
+        reason: 'Recommended drill to strengthen your quantifiable results and structural crispness.'
+      },
+      {
+        topic: 'Prodapt Engineering Standards',
+        type: 'documentation',
+        title: 'TM Forum Open Digital Architecture (ODA) & Cloud-Native Specifications',
+        url: 'https://www.tmforum.org/oda/',
+        provider: 'Official Docs',
+        estimatedTime: '10 mins read',
+        reason: 'Master standard open APIs (TMF 642, 622) for carrier-grade OSS/BSS transformations.'
+      }
+    ],
     recurringGapsIdentified: [
       fillerCount > 3 ? 'Recurrent filler word usage during transitions' : 'Opportunity to add more quantitative metrics',
       'Brief hesitation before explaining technical trade-offs'

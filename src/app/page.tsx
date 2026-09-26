@@ -183,6 +183,35 @@ export default function Home() {
       mediumTermPractice: 'Practice answering with the Executive Pyramid Principle (Answer First, followed by Supporting Pillars).',
       recommendedFramework: 'Pyramid Principle + STAR'
     },
+    curatedResources: [
+      {
+        topic: 'FastAPI & Async Concurrency',
+        type: 'video',
+        title: 'FastAPI Production Architecture: Async Event Loops & Concurrency Limits',
+        url: 'https://www.youtube.com/results?search_query=fastapi+async+event+loop+concurrency+crash+course',
+        provider: 'YouTube',
+        estimatedTime: '15 mins',
+        reason: 'Recommended for strengthening non-blocking I/O event dispatch and thread pool tuning.'
+      },
+      {
+        topic: 'Kafka Event Streaming for Telcos',
+        type: 'video',
+        title: 'Kafka Architecture Masterclass: Partitioning, Replication & 5-Nines SLA',
+        url: 'https://www.youtube.com/results?search_query=kafka+event+streaming+distributed+systems+architecture',
+        provider: 'YouTube',
+        estimatedTime: '22 mins',
+        reason: 'Directly addresses carrier-grade event backbone decoupling from legacy OSS/BSS.'
+      },
+      {
+        topic: 'STAR Quantifiable ROI for Executives',
+        type: 'tutorial',
+        title: 'Mastering the Result in STAR: Translating Technical Refactoring to EBITDA',
+        url: 'https://www.youtube.com/results?search_query=STAR+interview+quantifiable+business+impact+engineering',
+        provider: 'Prodapt Academy',
+        estimatedTime: '12 mins',
+        reason: 'Helps articulate the 30% upfront infrastructure ROI to skeptical CFOs.'
+      }
+    ],
     recurringGapsIdentified: ['Opportunity to introduce C-level financial framing earlier']
   });
 
@@ -486,14 +515,11 @@ export default function Home() {
           </div>
 
           {/* Right Controls */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all border border-slate-200"
-              title="Platform Settings & API Key"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+              <span className="font-semibold text-slate-900">Prodapt AI Engine Active</span>
+            </div>
             <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
               P
             </div>
@@ -1026,6 +1052,57 @@ export default function Home() {
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
+
+            {/* Curated Learning & Video Resources (Targeted Weakness Preparation) */}
+            {evaluationFeedback.curatedResources && evaluationFeedback.curatedResources.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Play className="w-3.5 h-3.5 text-red-600 fill-red-600" />
+                    Recommended Video Tutorials &amp; Preparation Resources
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Auto-curated for your detected technical &amp; structural gaps
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {evaluationFeedback.curatedResources.map((res, idx) => (
+                    <a
+                      key={idx}
+                      href={res.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-blue-400 hover:shadow-xs transition-all group space-y-2 block"
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className={`px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
+                          res.provider === 'YouTube'
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}>
+                          {res.provider}
+                        </span>
+                        <span className="text-slate-400 font-medium">{res.estimatedTime}</span>
+                      </div>
+
+                      <h5 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2">
+                        {res.title}
+                      </h5>
+
+                      <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+                        {res.reason}
+                      </p>
+
+                      <div className="pt-1 flex items-center gap-1 text-[11px] font-semibold text-blue-600">
+                        <span>Watch Video / Read Guide</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -1130,61 +1207,6 @@ export default function Home() {
           <span className="font-mono text-[11px]">Confidential C-Level Evaluation Session</span>
         </div>
       </footer>
-
-      {/* Settings Modal (API Key Configuration) */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Settings className="w-4 h-4 text-blue-600" />
-                Platform Configuration &amp; Model Engine
-              </h3>
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-xs font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="text-slate-700 font-semibold block mb-1">OpenAI API Key (Optional):</label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    localStorage.setItem('elevate_ai_openai_key', e.target.value);
-                  }}
-                  placeholder="sk-... (Leave empty to use high-fidelity offline rule engine)"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
-                />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Your key is saved locally in your browser. If empty or invalid, ElevateAI automatically engages the deterministic fallback engine.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                <span className="font-bold text-slate-900 block">Active Engine Status:</span>
-                <span className="text-blue-600 font-mono text-[11px] block">
-                  {apiKey ? 'OpenAI GPT-4o (Coach) + GPT-4o-mini (Specialists)' : 'High-Fidelity Deterministic Fallback Engine (Offline Safe)'}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700"
-              >
-                Save &amp; Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

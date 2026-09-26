@@ -83,6 +83,16 @@ export interface AgentTraceMessage {
   details?: Record<string, unknown>;
 }
 
+export interface LearningResource {
+  topic: string;
+  type: 'video' | 'documentation' | 'tutorial';
+  title: string;
+  url: string;
+  provider: 'YouTube' | 'Official Docs' | 'Interactive Lab' | 'Prodapt Academy';
+  estimatedTime: string;
+  reason: string;
+}
+
 export interface CoachingFeedback {
   overallScore: number; // 0-100
   verdict: 'Ready for Next Stage' | 'Promising - Needs Refinement' | 'Needs Substantial Practice';
@@ -110,6 +120,7 @@ export interface CoachingFeedback {
     mediumTermPractice: string;
     recommendedFramework: string;
   };
+  curatedResources: LearningResource[];
   recurringGapsIdentified: string[];
 }
 

@@ -204,7 +204,8 @@ Generate the final synthesis:
 5. Answer rewrite guidance (actionable bullet points).
 6. An adaptive follow-up question probing a weak spot in their response.
 7. A personalized improvement plan (immediate fix, medium-term practice, recommended framework).
-8. Recurring gaps to watch out for.
+8. curatedResources: 2-3 specific learning resources (YouTube videos, official documentation, or tutorials) tailored precisely to address the candidate's detected weaknesses (e.g. if they struggled with FastAPI, Kafka, STAR quantifiable metrics, or concurrency, generate direct learning resources with YouTube search/video links).
+9. Recurring gaps to watch out for.
 
 Return ONLY valid JSON matching this exact structure:
 {
@@ -231,6 +232,17 @@ Return ONLY valid JSON matching this exact structure:
     "mediumTermPractice": "...",
     "recommendedFramework": "..."
   },
+  "curatedResources": [
+    {
+      "topic": "FastAPI Async Operations",
+      "type": "video",
+      "title": "FastAPI Concurrency & Production Architecture",
+      "url": "https://www.youtube.com/results?search_query=fastapi+concurrency+architecture+tutorial",
+      "provider": "YouTube",
+      "estimatedTime": "15 mins",
+      "reason": "Address identified gap in async event loop handling."
+    }
+  ],
   "recurringGapsIdentified": ["...", "..."]
 }`;
 
@@ -250,13 +262,34 @@ Return ONLY valid JSON matching this exact structure:
       stage: 'complete',
       timestamp: new Date().toISOString(),
       latencyMs: coachLatency,
-      summary: `Synthesized multi-agent inputs. Assigned verdict "${coachData.verdict}" with overall score ${coachData.overallScore}/100. Formulated adaptive follow-up question and actionable improvement plan.`,
+      summary: `Synthesized multi-agent inputs. Assigned verdict "${coachData.verdict}" with overall score ${coachData.overallScore}/100. Formulated adaptive follow-up question and actionable improvement plan with ${coachData.curatedResources?.length || 2} curated learning resources.`,
       details: {
         verdict: coachData.verdict,
         overallScore: coachData.overallScore,
         rubricScores: coachData.rubricScores
       }
     });
+
+    const defaultResources = [
+      {
+        topic: question.competency,
+        type: 'video' as const,
+        title: `${question.competency} — Deep Dive & System Design Guide`,
+        url: `https://www.youtube.com/results?search_query=${encodeURIComponent(question.competency + ' interview tutorial')}`,
+        provider: 'YouTube' as const,
+        estimatedTime: '16 mins',
+        reason: 'Recommended targeted preparation based on your evaluation.'
+      },
+      {
+        topic: 'STAR Methodology & Impact',
+        type: 'tutorial' as const,
+        title: 'Mastering STAR: Turning Technical Tasks into Measurable ROI',
+        url: 'https://www.youtube.com/results?search_query=STAR+interview+technique+for+software+engineers',
+        provider: 'YouTube' as const,
+        estimatedTime: '12 mins',
+        reason: 'Strengthen metric quantification and structural delivery.'
+      }
+    ];
 
     const finalFeedback: CoachingFeedback = {
       overallScore: coachData.overallScore || 80,
@@ -285,6 +318,7 @@ Return ONLY valid JSON matching this exact structure:
         mediumTermPractice: 'Practice STAR structuring',
         recommendedFramework: 'STAR'
       },
+      curatedResources: coachData.curatedResources?.length > 0 ? coachData.curatedResources : defaultResources,
       recurringGapsIdentified: coachData.recurringGapsIdentified || ['Needs more quantifiable metrics']
     };
 
