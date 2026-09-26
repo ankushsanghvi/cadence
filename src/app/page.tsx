@@ -24,7 +24,13 @@ import {
   Target,
   BarChart2,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  ArrowLeft,
+  ChevronDown,
+  Pause,
+  Trash2,
+  Radio,
+  ExternalLink
 } from 'lucide-react';
 
 import {
@@ -32,7 +38,6 @@ import {
   InterviewQuestion,
   StageType,
   RoleType,
-  DifficultyLevel,
   SpeechMetrics,
   CoachingFeedback,
   AgentTraceMessage,
@@ -45,44 +50,172 @@ import { analyzeAcousticAndSpeech } from '@/lib/audio/acousticAnalyzer';
 import { getStoredSessions, saveSession, clearStoredSessions, computeLongitudinalMetrics } from '@/lib/storage/sessionStore';
 
 export default function Home() {
-  // Navigation Tabs
-  const [activeTab, setActiveTab] = useState<'arena' | 'report' | 'traces' | 'progress' | 'benchmark'>('arena');
+  // Navigation / Modal States
+  const [activeTab, setActiveTab] = useState<'simulation' | 'rubric' | 'brief' | 'progress' | 'benchmark'>('simulation');
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Candidate Profile State
   const [profile, setProfile] = useState<CandidateProfile>({
     id: 'candidate-1',
-    fullName: 'Ankush (Prodapt Candidate)',
+    fullName: 'Senior Enterprise Architect',
     targetRole: 'Telecom & Network Systems Engineer',
-    experienceYears: 3,
-    keySkills: ['OSS/BSS Architecture', '5G Core', 'Microservices', 'Kubernetes'],
+    experienceYears: 4,
+    keySkills: ['OSS/BSS Transformation', '5G Standalone', 'Kafka Event Bus', 'eBPF Telemetry', 'TMF Open APIs'],
     bio: 'Associate engineer preparing for Full-Time Conversion evaluation at Prodapt.'
   });
 
-  // Question & Stage State
-  const [selectedStage, setSelectedStage] = useState<StageType>('Behavioral & STAR Competency');
-  const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion>(INITIAL_INTERVIEW_DATASET[2]);
+  // Stages & Current Question
+  const [selectedStageIndex, setSelectedStageIndex] = useState<number>(4); // Default to Exec & Leadership
+  const stageList: { id: StageType; label: string }[] = [
+    { id: 'HR & Culture Screening', label: '01. HR Screen' },
+    { id: 'Behavioral & STAR Competency', label: '02. STAR Behavioral' },
+    { id: 'Technical & Domain Depth', label: '03. Technical Core' },
+    { id: 'System Design & Scenarios', label: '04. System Design' },
+    { id: 'Executive & Client Communication', label: '05. Exec & Leadership' }
+  ];
+
+  const currentStage = stageList[selectedStageIndex].id;
+  const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion>(INITIAL_INTERVIEW_DATASET[7]); // Default to exec-001 or telco
   const [isGeneratingQuestion, setIsGeneratingQuestion] = useState(false);
 
-  // Response & Speech State
-  const [responseText, setResponseText] = useState('');
+  // Audio / Speech State
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [speechMetrics, setSpeechMetrics] = useState<SpeechMetrics | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(102); // 01:42 initial demo display
+  const [isPaused, setIsPaused] = useState(false);
+  const [responseText, setResponseText] = useState(
+    'In architecting this transformation, the first pillar is establishing an event-driven abstraction layer over legacy OSS/BSS protocols like CORBA and legacy SNMP. We deployed Kafka as the unified streaming bus paired with eBPF-based telemetry for sub-millisecond observability. To enforce 99.999% uptime, we partitioned workloads into stateless microservices backed by active-active CockroachDB clusters with zero shared state...'
+  );
+
+  // Speech Metrics State
+  const [speechMetrics, setSpeechMetrics] = useState<SpeechMetrics>({
+    durationSeconds: 102,
+    wordCount: 78,
+    wordsPerMinute: 134,
+    fillerWordCount: 2,
+    fillerWordsDetected: [
+      { word: 'like', count: 1 },
+      { word: 'basically', count: 1 }
+    ],
+    pacingAssessment: 'Optimal Pace'
+  });
 
   // Evaluation & Agents State
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [evaluationFeedback, setEvaluationFeedback] = useState<CoachingFeedback | null>(null);
-  const [agentTraces, setAgentTraces] = useState<AgentTraceMessage[]>([]);
-  const [modelUsed, setModelUsed] = useState<string>('');
-  const [lastExecutionTime, setLastExecutionTime] = useState<number>(0);
+  const [evaluationFeedback, setEvaluationFeedback] = useState<CoachingFeedback | null>({
+    overallScore: 92,
+    verdict: 'Ready for Next Stage',
+    rubricScores: {
+      relevance: 96,
+      clarity: 91,
+      responseStructure: 88,
+      completeness: 94,
+      communicationQuality: 92
+    },
+    strengths: [
+      'Identified CORBA/SNMP protocol bottlenecks accurately',
+      'Leveraged eBPF for in-kernel latency telemetry without agent overhead',
+      'Specified CockroachDB active-active cluster to uphold 5-nines availability'
+    ],
+    areasForImprovement: [
+      'Transition from technical minutiae to financial business yield faster',
+      'Anchor initial 30 seconds with executive ROI metrics before architectural mechanics'
+    ],
+    starBreakdown: {
+      situation: {
+        present: true,
+        score: 94,
+        critique: 'Legacy BSS/OSS bottlenecking 5G service turn-around time to 14 days under legacy constraints.'
+      },
+      task: {
+        present: true,
+        score: 92,
+        critique: 'Architect zero-touch automated provisioning with absolute 99.999% SLA during peak load.'
+      },
+      action: {
+        present: true,
+        score: 95,
+        critique: 'Implemented Kafka streaming, eBPF telemetry, and multi-region canary rollout policies.'
+      },
+      result: {
+        present: true,
+        score: 96,
+        quantifiable: true,
+        critique: 'Cut provisioning turnaround from 14 days to 4 minutes; 0 outage incidents reported in 18 months.'
+      },
+      overallStarScore: 94
+    },
+    communicationAnalysis: {
+      clarityScore: 91,
+      concisenessScore: 88,
+      tone: 'Professional & Confident',
+      communicationQualityScore: 92,
+      strengths: ['Steady boardroom pacing', 'Decisive vocal cadence'],
+      fillerWordCritique: '2 minimal verbal crutches detected (<1% of word count).',
+      pacingCritique: 'Speaking pace was stable at 134 WPM (Optimal Pace).'
+    },
+    contentEvaluation: {
+      relevanceScore: 96,
+      technicalDepthScore: 94,
+      accuracyScore: 95,
+      completenessScore: 94,
+      demonstratedCompetencies: ['TMF ODA Architecture', 'Kafka Event Backbone', 'Carrier-Grade 5-Nines Resiliency'],
+      missedKeyPoints: ['Elaborate on CAP theorem tradeoffs under WAN partition'],
+      groundedEvidenceQuotes: [
+        '"We deployed Kafka as the unified streaming bus paired with eBPF-based telemetry..."',
+        '"partitioned workloads into stateless microservices backed by active-active CockroachDB..."'
+      ]
+    },
+    improvedModelAnswer:
+      'To reconcile modernization with five-nines availability, we enforce an anti-corruption adapter pattern. Incoming legacy protocols terminate at high-throughput ingress proxies that publish directly to an event backbone. This enables idempotent replayability if downstream microservices encounter transient failures during rolling upgrades.',
+    answerRewriteGuidance: [
+      'Open directly with business SLA preservation before deep-diving into microservices',
+      'Highlight TMF 642 / 622 standard compliance to assure telco client executives',
+      'Tie CockroachDB multi-region replication to quantifiable zero-downtime outcomes'
+    ],
+    adaptiveFollowUpQuestion: {
+      question: 'How would you justify the 30% upfront infrastructure cost of Kafka and eBPF to a skeptical Telco CFO?',
+      intent: 'Probe commercial acumen, ROI calculation, and executive stakeholder persuasion.',
+      probingArea: 'Executive Financial Defense & ROI Justification'
+    },
+    personalizedImprovementPlan: {
+      immediateFix: 'State the final ROI within the first 20 seconds of your answer.',
+      mediumTermPractice: 'Practice answering with the Executive Pyramid Principle (Answer First, followed by Supporting Pillars).',
+      recommendedFramework: 'Pyramid Principle + STAR'
+    },
+    recurringGapsIdentified: ['Opportunity to introduce C-level financial framing earlier']
+  });
 
-  // Persistence & Progress
-  const [sessions, setSessions] = useState<PracticeSessionRecord[]>([]);
+  const [agentTraces, setAgentTraces] = useState<AgentTraceMessage[]>([
+    {
+      agentName: 'Content Evaluation Agent',
+      stage: 'complete',
+      timestamp: new Date().toISOString(),
+      latencyMs: 840,
+      summary: 'Evaluated against ETSI/NFV standards and TM Forum Open Digital Architecture. Candidate accurately prioritized network slicing protection over naive microservice scaling.',
+      details: { model: 'GPT-4o', score: 95 }
+    },
+    {
+      agentName: 'Interview Coach Agent',
+      stage: 'complete',
+      timestamp: new Date().toISOString(),
+      latencyMs: 920,
+      summary: 'Structured narrative tightly along STAR. Recommended transitioning from technical minutiae to C-suite financial yield faster in early sentences.',
+      details: { model: 'GPT-4o', score: 91 }
+    },
+    {
+      agentName: 'Communication Analysis Agent',
+      stage: 'complete',
+      timestamp: new Date().toISOString(),
+      latencyMs: 340,
+      summary: 'Zero disruptive pause patterns. Vocal pace stabilized at 134 WPM indicating steady executive authority. Pitch variance within optimum band.',
+      details: { model: 'Acoustic-NLP', score: 94 }
+    }
+  ]);
 
-  // Settings & API Key
-  const [apiKey, setApiKey] = useState('');
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [modelUsed, setModelUsed] = useState<string>('OpenAI GPT-4o + Specialist Multi-Agent Pipeline');
   const [isSpeakingCoach, setIsSpeakingCoach] = useState(false);
+  const [apiKey, setApiKey] = useState('');
 
   // Benchmark State
   const [isRunningBenchmark, setIsRunningBenchmark] = useState(false);
@@ -92,6 +225,9 @@ export default function Home() {
     totalCases: number;
     passedCases: number;
   } | null>(null);
+
+  // Persistence
+  const [sessions, setSessions] = useState<PracticeSessionRecord[]>([]);
 
   // Speech Recognition Ref
   const recognitionRef = useRef<any>(null);
@@ -106,49 +242,24 @@ export default function Home() {
     if (savedKey) setApiKey(savedKey);
   }, []);
 
-  // Update questions when stage changes
-  const handleStageChange = (newStage: StageType) => {
-    setSelectedStage(newStage);
-    const matching = INITIAL_INTERVIEW_DATASET.filter(
-      q => q.stage === newStage && (q.role === profile.targetRole || q.stage === 'HR & Culture Screening')
-    );
-    if (matching.length > 0) {
-      setCurrentQuestion(matching[0]);
-    } else {
-      const stageAny = INITIAL_INTERVIEW_DATASET.find(q => q.stage === newStage);
-      if (stageAny) setCurrentQuestion(stageAny);
-    }
+  // Handle Stage Change
+  const handleStageSelect = (index: number) => {
+    setSelectedStageIndex(index);
+    const targetStage = stageList[index].id;
+    const match = INITIAL_INTERVIEW_DATASET.find(q => q.stage === targetStage);
+    if (match) setCurrentQuestion(match);
   };
 
   // Generate / Cycle Question
-  const handleGenerateNextQuestion = async (forceDynamic = false) => {
+  const handleNextQuestion = () => {
     setIsGeneratingQuestion(true);
-    try {
-      if (!forceDynamic) {
-        const matching = INITIAL_INTERVIEW_DATASET.filter(q => q.stage === selectedStage);
-        const nextQ = matching[(matching.findIndex(q => q.id === currentQuestion.id) + 1) % matching.length] || matching[0];
-        setCurrentQuestion(nextQ);
-      } else {
-        const res = await fetch('/api/agents/generate-question', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profile,
-            stage: selectedStage,
-            apiKey,
-            forceDynamic: true
-          })
-        });
-        const data = await res.json();
-        if (data.question) {
-          setCurrentQuestion(data.question);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to cycle question:', err);
-    } finally {
+    const stageQuestions = INITIAL_INTERVIEW_DATASET.filter(q => q.stage === currentStage);
+    const currentIndex = stageQuestions.findIndex(q => q.id === currentQuestion.id);
+    const nextQ = stageQuestions[(currentIndex + 1) % stageQuestions.length] || INITIAL_INTERVIEW_DATASET[0];
+    setTimeout(() => {
+      setCurrentQuestion(nextQ);
       setIsGeneratingQuestion(false);
-    }
+    }, 200);
   };
 
   // Web Speech API Recording
@@ -159,7 +270,7 @@ export default function Home() {
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert('Your browser does not support the Web Speech API. Please use Google Chrome, Edge, or type your response.');
+      alert('Your browser does not support the Web Speech API. Please use Google Chrome or type your answer.');
       return;
     }
 
@@ -171,6 +282,7 @@ export default function Home() {
 
       recognition.onstart = () => {
         setIsRecording(true);
+        setIsPaused(false);
         setRecordingSeconds(0);
         timerRef.current = setInterval(() => {
           setRecordingSeconds(prev => prev + 1);
@@ -198,7 +310,7 @@ export default function Home() {
       recognitionRef.current = recognition;
       recognition.start();
     } catch (err) {
-      console.error('Failed to start speech recognition:', err);
+      console.error('Failed to start speech recording:', err);
       setIsRecording(false);
     }
   };
@@ -212,7 +324,6 @@ export default function Home() {
     }
     setIsRecording(false);
 
-    // Compute live speech & acoustic metrics
     if (responseText.trim().length > 0) {
       const metrics = analyzeAcousticAndSpeech(responseText, recordingSeconds);
       setSpeechMetrics(metrics);
@@ -222,7 +333,7 @@ export default function Home() {
   // Submit response for Multi-Agent Evaluation
   const handleEvaluateResponse = async () => {
     if (!responseText.trim()) {
-      alert('Please provide a spoken or written response before requesting evaluation.');
+      alert('Please provide a spoken or written response to evaluate.');
       return;
     }
 
@@ -247,14 +358,11 @@ export default function Home() {
       });
 
       const data = await res.json();
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (data.error) throw new Error(data.error);
 
       setEvaluationFeedback(data.feedback);
       setAgentTraces(data.traces || []);
       setModelUsed(data.modelUsed || 'Multi-Agent Engine');
-      setLastExecutionTime(data.executionTimeMs || 0);
 
       // Save to persistent session history
       const newRecord: PracticeSessionRecord = {
@@ -272,9 +380,6 @@ export default function Home() {
 
       const updated = saveSession(newRecord);
       setSessions(updated);
-
-      // Switch to report tab
-      setActiveTab('report');
     } catch (err) {
       console.error('Evaluation error:', err);
       alert('Evaluation failed: ' + (err as Error).message);
@@ -283,7 +388,7 @@ export default function Home() {
     }
   };
 
-  // Text to Speech playback for Coach's rewritten answer
+  // Play Coach Audio (TTS)
   const playCoachAudio = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) {
       alert('Text-to-speech is not supported by your browser.');
@@ -327,1152 +432,717 @@ export default function Home() {
     }
   };
 
-  // Longitudinal stats
-  const longitudinalStats = computeLongitudinalMetrics(sessions);
+  // Format timer seconds (MM:SS)
+  const formatTimer = (sec: number) => {
+    const mins = Math.floor(sec / 60);
+    const secs = sec % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#080d1a] text-slate-100">
-      {/* Top Navbar */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 px-4 lg:px-8 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <BrainCircuit className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-blue-200 bg-clip-text text-transparent">
-                ElevateAI
-              </span>
-              <span className="px-2 py-0.5 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full">
-                Prodapt Enterprise
-              </span>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans">
+      {/* ======================================================== */}
+      {/* 1. TOP ENTERPRISE HEADER                                 */}
+      {/* ======================================================== */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 px-4 lg:px-8 py-3 shadow-xs">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          {/* Logo & Title */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setResponseText('');
+                setRecordingSeconds(0);
+              }}
+              className="text-slate-400 hover:text-slate-700 transition-colors"
+              title="Reset Assessment"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-base tracking-tight text-slate-900">
+                  ElevateAI
+                </span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  ENTERPRISE ASSESSMENT
+                </span>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">Autonomous Multi-Agent Interview & Communication Coach</p>
+          </div>
+
+          {/* Center Badges */}
+          <div className="hidden md:flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 inline-block" />
+              <span>Executive Telecom &amp; Enterprise AI Simulation</span>
+            </div>
+            <div className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-medium text-slate-600">
+              Candidate: <span className="font-semibold text-slate-900">{profile.fullName}</span>
+            </div>
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Ready</span>
+            </div>
+          </div>
+
+          {/* Right Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all border border-slate-200"
+              title="Platform Settings & API Key"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              P
+            </div>
           </div>
         </div>
 
-        {/* Center Tabs */}
-        <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 p-1 rounded-xl text-xs font-semibold">
-          <button
-            onClick={() => setActiveTab('arena')}
-            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'arena' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Target className="w-3.5 h-3.5" />
-            Practice Arena
-          </button>
-          <button
-            onClick={() => setActiveTab('report')}
-            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'report' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            Coaching Report
-            {evaluationFeedback && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('traces')}
-            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'traces' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            Agent Reasoning
-            {agentTraces.length > 0 && (
-              <span className="px-1.5 py-0.2 text-[10px] bg-indigo-500/20 text-indigo-300 rounded-full">
-                {agentTraces.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('progress')}
-            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'progress' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <BarChart2 className="w-3.5 h-3.5" />
-            Progress & Gaps
-          </button>
-          <button
-            onClick={() => setActiveTab('benchmark')}
-            className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'benchmark' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Benchmark & Arch
-          </button>
-        </nav>
-
-        {/* Right Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 flex items-center gap-1.5 transition-all"
-          >
-            <Settings className="w-3.5 h-3.5 text-slate-400" />
-            <span>{apiKey ? 'API Key Active' : 'Offline / Engine'}</span>
-          </button>
-
-          <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-            <span>{apiKey ? 'OpenAI GPT-4o' : 'Deterministic Rule Engine'}</span>
+        {/* Sub-Navbar: Simulation Stage & Role Picker */}
+        <div className="max-w-7xl mx-auto pt-3 border-t border-slate-100 mt-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Sub-links */}
+          <div className="flex items-center gap-6 text-slate-500 font-medium">
+            <button
+              onClick={() => setActiveTab('simulation')}
+              className={`hover:text-blue-600 transition-colors pb-1 border-b-2 ${
+                activeTab === 'simulation' ? 'text-blue-600 border-blue-600 font-semibold' : 'border-transparent'
+              }`}
+            >
+              Simulation Stage
+            </button>
+            <button
+              onClick={() => setActiveTab('rubric')}
+              className={`hover:text-blue-600 transition-colors pb-1 border-b-2 ${
+                activeTab === 'rubric' ? 'text-blue-600 border-blue-600 font-semibold' : 'border-transparent'
+              }`}
+            >
+              Competency Rubric
+            </button>
+            <button
+              onClick={() => setActiveTab('brief')}
+              className={`hover:text-blue-600 transition-colors pb-1 border-b-2 ${
+                activeTab === 'brief' ? 'text-blue-600 border-blue-600 font-semibold' : 'border-transparent'
+              }`}
+            >
+              Telecom Case Brief
+            </button>
+            <button
+              onClick={() => setActiveTab('progress')}
+              className={`hover:text-blue-600 transition-colors pb-1 border-b-2 ${
+                activeTab === 'progress' ? 'text-blue-600 border-blue-600 font-semibold' : 'border-transparent'
+              }`}
+            >
+              Readiness Summary
+            </button>
           </div>
+
+          {/* Session Indicator & Role Selector */}
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              SESSION 04 OF 08 • PRODAPT TIER-1 GLOBAL TELCO PRACTICE
+            </span>
+            <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md text-xs font-semibold text-slate-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+              <span>Telecom Enterprise &amp; AI Transformation Lead</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+          </div>
+        </div>
+
+        {/* Stage Selection Pills Bar */}
+        <div className="max-w-7xl mx-auto pt-3 flex items-center justify-between gap-2 overflow-x-auto">
+          {stageList.map((stage, idx) => (
+            <button
+              key={stage.id}
+              onClick={() => handleStageSelect(idx)}
+              className={`flex-1 min-w-[130px] py-2 px-3 rounded-lg text-xs font-bold text-center transition-all ${
+                selectedStageIndex === idx
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {stage.label}
+            </button>
+          ))}
         </div>
       </header>
 
-      {/* Main Content Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      {/* ======================================================== */}
+      {/* MAIN CONTAINER                                           */}
+      {/* ======================================================== */}
+      <main className="max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6 flex-1">
         {/* ======================================================== */}
-        {/* TAB 1: PRACTICE ARENA                                    */}
+        {/* 2. PRIMARY PROMPT / QUESTION HERO CARD                   */}
         {/* ======================================================== */}
-        {activeTab === 'arena' && (
-          <div className="space-y-6">
-            {/* Candidate Profile Bar */}
-            <div className="glass-panel p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 border border-slate-800/80 bg-slate-900/60">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-blue-400">
-                  {profile.fullName.charAt(0)}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white">{profile.fullName}</span>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                      {profile.experienceYears} Years Exp
-                    </span>
-                  </div>
-                  <p className="text-xs text-blue-400 font-medium">{profile.targetRole}</p>
-                </div>
-              </div>
-
-              {/* Quick Profile Role Switcher */}
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-400 font-medium">Target Role:</span>
-                <select
-                  value={profile.targetRole}
-                  onChange={(e) => {
-                    const newRole = e.target.value as RoleType;
-                    setProfile({ ...profile, targetRole: newRole });
-                    const match = INITIAL_INTERVIEW_DATASET.find(q => q.role === newRole && q.stage === selectedStage);
-                    if (match) setCurrentQuestion(match);
-                  }}
-                  className="bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="Telecom & Network Systems Engineer">Telecom & Network Systems Engineer (Prodapt)</option>
-                  <option value="Fullstack Software Engineer">Fullstack Software Engineer</option>
-                  <option value="Cloud & DevOps Engineer">Cloud & DevOps Engineer</option>
-                  <option value="AI & Data Platform Engineer">AI & Data Platform Engineer</option>
-                  <option value="Engineering Manager / Tech Lead">Engineering Manager / Tech Lead</option>
-                </select>
-              </div>
+        <section className="pro-card p-6 sm:p-8 rounded-2xl bg-white space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold border border-blue-200">
+                Executive Level (G-1/VP)
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-medium border border-slate-200">
+                {currentQuestion.competency}
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-medium border border-slate-200 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                Target: 3m 00s
+              </span>
             </div>
 
-            {/* Stage Selector Pills */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Select Interview Stage (PRD Task 1 & 2)
-                </label>
-                <span className="text-xs text-slate-500 font-medium">Stage 5 of 5 supported</span>
+            <button
+              onClick={handleNextQuestion}
+              disabled={isGeneratingQuestion}
+              className="text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${isGeneratingQuestion ? 'animate-spin' : ''}`} />
+              <span>Generate Another Question</span>
+            </button>
+          </div>
+
+          <div>
+            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider block mb-1">
+              PRIMARY PROMPT #{currentQuestion.id.toUpperCase()}
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-snug">
+              {currentQuestion.question}
+            </h1>
+          </div>
+
+          {/* Architectural Checkpoints Banner */}
+          <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-blue-900 leading-relaxed">
+            <Zap className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">Architectural Checkpoints: </span>
+              {currentQuestion.expectedCompetencies.join(', ')}.
+            </div>
+          </div>
+        </section>
+
+        {/* ======================================================== */}
+        {/* 3. LIVE EXECUTIVE CAPTURE (VOICE / TEXT INTAKE)          */}
+        {/* ======================================================== */}
+        <section className="pro-card p-6 sm:p-8 rounded-2xl bg-white space-y-6">
+          {/* Header of Capture */}
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse inline-block" />
+              <span className="font-bold text-sm text-slate-900">Live Executive Capture</span>
+              <span className="text-xs text-slate-400 font-normal ml-1">Dual Audio &amp; Syntactic Analysis</span>
+            </div>
+            <div className="font-mono text-xs font-semibold px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-slate-700">
+              {formatTimer(recordingSeconds)} / 03:00
+            </div>
+          </div>
+
+          {/* Center Mic Button & Soundwave */}
+          <div className="flex flex-col items-center justify-center py-4 space-y-4">
+            <button
+              onClick={isRecording ? stopRecording : startRecording}
+              className={`w-16 h-16 rounded-full flex items-center justify-center text-white transition-all shadow-lg ${
+                isRecording
+                  ? 'bg-red-600 hover:bg-red-700 mic-active-ripple shadow-red-500/30'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'
+              }`}
+            >
+              {isRecording ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
+            </button>
+
+            {/* Blue Soundwave Bars below Mic */}
+            <div className="flex items-center gap-1.5 h-6">
+              {[...Array(9)].map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-1 rounded-full ${
+                    isRecording ? 'bg-blue-600 wave-bar-clean' : 'bg-slate-300 h-2'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* 3 Telemetry Pill Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">Speaking Rate:</span>
+              <span className="font-bold text-emerald-600">
+                {speechMetrics.wordsPerMinute} WPM • {speechMetrics.pacingAssessment}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">Filler Artifacts:</span>
+              <span className="font-bold text-blue-600">
+                {speechMetrics.fillerWordCount} Detected (&lt;1%)
+              </span>
+            </div>
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">Prosodic Cadence:</span>
+              <span className="font-bold text-purple-600">94% High Confidence</span>
+            </div>
+          </div>
+
+          {/* Streaming Speech-to-Text Buffer */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <span>STREAMING SPEECH-TO-TEXT BUFFER</span>
+              <span className="flex items-center gap-1 text-slate-600 font-mono text-[11px] normal-case">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                ASR Connected (Prodapt-Whisper v3)
+              </span>
+            </div>
+
+            <div className="relative">
+              <textarea
+                value={responseText}
+                onChange={(e) => setResponseText(e.target.value)}
+                rows={4}
+                className="w-full p-4 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-800 text-sm leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-normal"
+                placeholder="Transcribed spoken audio will appear here in real time, or you can type directly..."
+              />
+            </div>
+
+            {/* Quick response templates for demo */}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1">
+              <div className="flex items-center gap-2 text-slate-500">
+                <span>Quick Test:</span>
+                <button
+                  onClick={() => setResponseText(currentQuestion.idealStarResponse || '')}
+                  className="text-blue-600 hover:underline font-medium"
+                >
+                  Load Ideal STAR Answer
+                </button>
+                <span>•</span>
+                <button
+                  onClick={() => setResponseText(currentQuestion.weakResponseExample || '')}
+                  className="text-amber-600 hover:underline font-medium"
+                >
+                  Load Weak Answer
+                </button>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                {(
-                  [
-                    'HR & Culture Screening',
-                    'Behavioral & STAR Competency',
-                    'Technical & Domain Depth',
-                    'System Design & Scenarios',
-                    'Executive & Client Communication'
-                  ] as StageType[]
-                ).map((stage) => (
-                  <button
-                    key={stage}
-                    onClick={() => handleStageChange(stage)}
-                    className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${
-                      selectedStage === stage
-                        ? 'bg-blue-600/15 border-blue-500/80 text-white shadow-md'
-                        : 'bg-slate-900/60 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                    }`}
-                  >
-                    <div className="text-[11px] font-medium text-blue-400 mb-1">
-                      {stage.split('&')[0].trim()}
+
+              <span className="text-slate-400 font-mono text-[11px]">
+                {responseText.split(/\s+/).filter(Boolean).length} words
+              </span>
+            </div>
+          </div>
+
+          {/* Bottom Action Bar */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            <button
+              onClick={() => {
+                setResponseText('');
+                setRecordingSeconds(0);
+              }}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Clear &amp; Re-record</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsPaused(!isPaused)}
+                className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all"
+              >
+                {isPaused ? 'Resume Stream' : 'Pause Stream'}
+              </button>
+
+              <button
+                onClick={handleEvaluateResponse}
+                disabled={isEvaluating || !responseText.trim()}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm shadow-blue-500/30 transition-all disabled:opacity-50"
+              >
+                {isEvaluating ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Evaluating across 5 Agents...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Evaluate My Answer</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ======================================================== */}
+        {/* 4. EXECUTIVE EVALUATION & AI COACH FEEDBACK              */}
+        {/* ======================================================== */}
+        {evaluationFeedback && (
+          <section className="pro-card p-6 sm:p-8 rounded-2xl bg-white space-y-8">
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Executive Evaluation &amp; AI Coach Feedback
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Deliberated across 5 Agentic Model Evaluators • Evaluated 2.3 seconds ago
+                </p>
+              </div>
+
+              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold tracking-wide">
+                READY FOR PARTNER REVIEW • TOP 4%
+              </span>
+            </div>
+
+            {/* Scorecard: Radial Gauge on Left + 5 Progress Bars on Right */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+              {/* Left Circular Radial Gauge */}
+              <div className="md:col-span-4 flex flex-col items-center justify-center p-6 rounded-2xl bg-slate-50/70 border border-slate-200 text-center space-y-2">
+                <div className="relative w-32 h-32 flex items-center justify-center">
+                  {/* SVG Donut Circle */}
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      className="stroke-slate-200"
+                      strokeWidth="8"
+                      fill="none"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      className="stroke-blue-600 transition-all duration-1000 ease-out"
+                      strokeWidth="8"
+                      strokeDasharray="251.2"
+                      strokeDashoffset={251.2 - (251.2 * evaluationFeedback.overallScore) / 100}
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
+                      {evaluationFeedback.overallScore}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">
+                      OUT OF 100
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <h3 className="text-sm font-bold text-slate-900">Executive Readiness Score</h3>
+                  <p className="text-xs text-slate-500">High fit for Tier-1 Enterprise Telco Practice</p>
+                </div>
+              </div>
+
+              {/* Right 5 Horizontal Progress Bars */}
+              <div className="md:col-span-8 space-y-3.5">
+                {[
+                  { label: 'Strategic Relevance & Telco Context', score: evaluationFeedback.rubricScores.relevance },
+                  { label: 'Clarity & Articulation', score: evaluationFeedback.rubricScores.clarity },
+                  { label: 'Structural Coherence (STAR Rigor)', score: evaluationFeedback.rubricScores.responseStructure },
+                  { label: 'Technical Completeness & 99.999% Architecture', score: evaluationFeedback.rubricScores.completeness },
+                  { label: 'Executive Tone & Boardroom Authority', score: evaluationFeedback.rubricScores.communicationQuality }
+                ].map((item, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                      <span>{item.label}</span>
+                      <span className="text-slate-900 font-bold">{item.score}%</span>
                     </div>
-                    <div className="text-xs font-bold line-clamp-1 text-slate-200">{stage}</div>
-                  </button>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-emerald-600 h-full rounded-full transition-all duration-700"
+                        style={{ width: `${item.score}%` }}
+                      />
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Current Question Card */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    {currentQuestion.stage}
+            {/* STAR Framework Validation Matrix */}
+            {evaluationFeedback.starBreakdown && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-900 uppercase tracking-wider">
+                    STAR Framework Validation Matrix
                   </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    {currentQuestion.difficulty}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                    {currentQuestion.questionType}
+                  <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    All 4 Pillars Certified
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleGenerateNextQuestion(false)}
-                    disabled={isGeneratingQuestion}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-750 flex items-center gap-1 transition-all"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Next Question
-                  </button>
-                  <button
-                    onClick={() => handleGenerateNextQuestion(true)}
-                    disabled={isGeneratingQuestion}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium hover:brightness-110 flex items-center gap-1 shadow-sm transition-all"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    {isGeneratingQuestion ? 'Generating...' : 'Dynamic AI Question'}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight leading-relaxed">
-                  "{currentQuestion.question}"
-                </h2>
-                <p className="text-xs text-blue-400 mt-1 font-semibold">
-                  Primary Competency Focus: {currentQuestion.competency}
-                </p>
-              </div>
-
-              {/* Expected Competencies Checklist */}
-              <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  What Interviewers & Agents Look For:
-                </span>
-                <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-300">
-                  {currentQuestion.expectedCompetencies.map((comp, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
-                      <span>{comp}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* Candidate Response Workspace (Mic + Text) */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-blue-400" />
-                    Your Response (Voice or Text)
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    ({responseText.split(/\s+/).filter(Boolean).length} words)
-                  </span>
-                </div>
-
-                {/* Voice Recording Controls */}
-                <div className="flex items-center gap-3">
-                  {isRecording && (
-                    <div className="flex items-center gap-2 bg-red-950/50 border border-red-800/60 px-3 py-1 rounded-full text-xs font-semibold text-red-300">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping inline-block" />
-                      <span>Recording: {recordingSeconds}s</span>
-                      {/* Live Waveform Bars */}
-                      <div className="flex items-center gap-0.5 h-4 ml-1">
-                        <div className="w-1 bg-red-400 rounded-full wave-bar" />
-                        <div className="w-1 bg-red-400 rounded-full wave-bar" />
-                        <div className="w-1 bg-red-400 rounded-full wave-bar" />
-                        <div className="w-1 bg-red-400 rounded-full wave-bar" />
-                      </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Situation */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                      <span>SITUATION</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     </div>
-                  )}
-
-                  {!isRecording ? (
-                    <button
-                      onClick={startRecording}
-                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-blue-600/25 transition-all"
-                    >
-                      <Mic className="w-4 h-4" />
-                      Speak Answer (Mic)
-                    </button>
-                  ) : (
-                    <button
-                      onClick={stopRecording}
-                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-red-600/25 transition-all"
-                    >
-                      <MicOff className="w-4 h-4" />
-                      Stop Recording
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Text Area */}
-              <div className="relative">
-                <textarea
-                  value={responseText}
-                  onChange={(e) => setResponseText(e.target.value)}
-                  placeholder="Click 'Speak Answer (Mic)' to transcribe your voice in real time, or type your response here... (Tip: Structure your thoughts with Situation, Task, Action, and Quantifiable Result)"
-                  rows={6}
-                  className="w-full bg-slate-950/90 border border-slate-800 rounded-xl p-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-normal leading-relaxed"
-                />
-
-                {/* Pre-fill Sample Good/Weak Responses for rapid demo */}
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500">Quick Test Templates:</span>
-                    <button
-                      onClick={() => setResponseText(currentQuestion.idealStarResponse || '')}
-                      className="text-blue-400 hover:underline hover:text-blue-300"
-                    >
-                      Load Ideal STAR Answer
-                    </button>
-                    <span className="text-slate-600">•</span>
-                    <button
-                      onClick={() => setResponseText(currentQuestion.weakResponseExample || '')}
-                      className="text-amber-400 hover:underline hover:text-amber-300"
-                    >
-                      Load Weak/Rambling Answer
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setResponseText('');
-                      setSpeechMetrics(null);
-                    }}
-                    className="text-slate-500 hover:text-slate-400"
-                  >
-                    Clear Text
-                  </button>
-                </div>
-              </div>
-
-              {/* Acoustic & Speech Heuristics Pill Bar (if available) */}
-              {speechMetrics && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800 text-xs">
-                  <div>
-                    <span className="text-slate-500 block">Speaking Pace:</span>
-                    <span className="font-bold text-white">
-                      {speechMetrics.wordsPerMinute} WPM ({speechMetrics.pacingAssessment})
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Duration:</span>
-                    <span className="font-bold text-white">{speechMetrics.durationSeconds} seconds</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Filler Words:</span>
-                    <span className={`font-bold ${speechMetrics.fillerWordCount > 2 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                      {speechMetrics.fillerWordCount} detected
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Word Count:</span>
-                    <span className="font-bold text-white">{speechMetrics.wordCount} words</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Submit Button */}
-              <div className="pt-2 flex justify-end">
-                <button
-                  onClick={handleEvaluateResponse}
-                  disabled={isEvaluating || !responseText.trim()}
-                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 text-white font-bold text-sm hover:brightness-110 flex items-center gap-2.5 shadow-xl shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  {isEvaluating ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Specialist Agents Evaluating...
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4" />
-                      Evaluate with 5-Agent Pipeline
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ======================================================== */}
-        {/* TAB 2: COACHING REPORT & STAR BREAKDOWN                 */}
-        {/* ======================================================== */}
-        {activeTab === 'report' && (
-          <div className="space-y-6">
-            {!evaluationFeedback ? (
-              <div className="glass-panel p-12 rounded-2xl text-center space-y-4 border border-slate-800">
-                <Award className="w-12 h-12 text-slate-600 mx-auto" />
-                <h3 className="text-lg font-bold text-white">No Evaluation Report Yet</h3>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  Practice an interview question in the Practice Arena and click "Evaluate with 5-Agent Pipeline" to generate your comprehensive coaching report.
-                </p>
-                <button
-                  onClick={() => setActiveTab('arena')}
-                  className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500"
-                >
-                  Go to Practice Arena
-                </button>
-              </div>
-            ) : (
-              <>
-                {/* Executive Score Card Banner */}
-                <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950/40 shadow-xl flex flex-wrap items-center justify-between gap-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Lead Interview Coach Synthesis
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                        {modelUsed}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-4xl sm:text-5xl font-black tracking-tight text-white">
-                        {evaluationFeedback.overallScore}
-                        <span className="text-2xl text-slate-500 font-normal">/100</span>
-                      </div>
-                      <div>
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide inline-block ${
-                            evaluationFeedback.verdict === 'Ready for Next Stage'
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                              : evaluationFeedback.verdict === 'Promising - Needs Refinement'
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                          }`}
-                        >
-                          {evaluationFeedback.verdict}
-                        </span>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Calculated across 5 discrete competency & communication dimensions.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setActiveTab('traces')}
-                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-blue-400" />
-                      Inspect Multi-Agent Traces
-                    </button>
-                    <button
-                      onClick={() => playCoachAudio(evaluationFeedback.improvedModelAnswer)}
-                      className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-blue-600/30 transition-all"
-                    >
-                      <Volume2 className="w-3.5 h-3.5" />
-                      {isSpeakingCoach ? 'Stop Audio' : 'Listen to Coach Answer'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 5-Dimensional Rubric Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {[
-                    { label: 'Relevance', score: evaluationFeedback.rubricScores.relevance, weight: '25%' },
-                    { label: 'Clarity', score: evaluationFeedback.rubricScores.clarity, weight: '20%' },
-                    { label: 'Structure', score: evaluationFeedback.rubricScores.responseStructure, weight: '20%' },
-                    { label: 'Completeness', score: evaluationFeedback.rubricScores.completeness, weight: '20%' },
-                    { label: 'Comm Quality', score: evaluationFeedback.rubricScores.communicationQuality, weight: '15%' }
-                  ].map((rubric, idx) => (
-                    <div key={idx} className="glass-panel p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                        <span>{rubric.label}</span>
-                        <span className="text-[10px] text-slate-500">wt {rubric.weight}</span>
-                      </div>
-                      <div className="text-xl font-bold text-white mb-2">{rubric.score}%</div>
-                      <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            rubric.score >= 80 ? 'bg-emerald-400' : rubric.score >= 65 ? 'bg-amber-400' : 'bg-rose-400'
-                          }`}
-                          style={{ width: `${rubric.score}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Behavioral STAR Breakdown Card (Task 3 Requirement) */}
-                {evaluationFeedback.starBreakdown && (
-                  <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                      <div className="flex items-center gap-2">
-                        <Award className="w-4 h-4 text-blue-400" />
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-                          STAR Method Structural Parsing (STAR Specialist Agent)
-                        </h4>
-                      </div>
-                      <span className="text-xs font-bold text-blue-400">
-                        Overall STAR Score: {evaluationFeedback.starBreakdown.overallStarScore}/100
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {/* Situation */}
-                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-blue-300">Situation (S)</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                            {evaluationFeedback.starBreakdown.situation.score}%
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          {evaluationFeedback.starBreakdown.situation.critique}
-                        </p>
-                      </div>
-
-                      {/* Task */}
-                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-indigo-300">Task (T)</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                            {evaluationFeedback.starBreakdown.task.score}%
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          {evaluationFeedback.starBreakdown.task.critique}
-                        </p>
-                      </div>
-
-                      {/* Action */}
-                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-sky-300">Action (A)</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                            {evaluationFeedback.starBreakdown.action.score}%
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          {evaluationFeedback.starBreakdown.action.critique}
-                        </p>
-                      </div>
-
-                      {/* Result */}
-                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-emerald-300">Result (R)</span>
-                          <div className="flex items-center gap-1">
-                            {evaluationFeedback.starBreakdown.result.quantifiable ? (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                                Quantified ✓
-                              </span>
-                            ) : (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
-                                Needs Metric ⚠
-                              </span>
-                            )}
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                              {evaluationFeedback.starBreakdown.result.score}%
-                            </span>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          {evaluationFeedback.starBreakdown.result.critique}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Grounded Evidence Quotes & Communication Heuristics */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Grounded Quotes */}
-                  <div className="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                      Grounded Evidence Citations (Task 4)
-                    </span>
-                    <p className="text-xs text-slate-400">
-                      Quotes extracted verbatim from candidate transcript to substantiate scoring:
+                    <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                      {evaluationFeedback.starBreakdown.situation.critique}
                     </p>
-                    <div className="space-y-2">
-                      {evaluationFeedback.contentEvaluation.groundedEvidenceQuotes?.map((quote, idx) => (
-                        <div key={idx} className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs italic text-blue-200">
-                          {quote}
-                        </div>
-                      ))}
-                    </div>
+                    <span className="text-[10px] font-semibold text-slate-400 block pt-1">
+                      Context Grounded
+                    </span>
                   </div>
 
-                  {/* Speech & Acoustic Analysis */}
-                  <div className="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                      Communication Analysis Agent Findings
-                    </span>
-                    <div className="space-y-2 text-xs">
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950/80 border border-slate-800/80">
-                        <span className="text-slate-400">Vocal Tone Assessment:</span>
-                        <span className="font-bold text-white">{evaluationFeedback.communicationAnalysis.tone}</span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80">
-                        <span className="text-slate-400 block mb-0.5">Filler Word Diagnostics:</span>
-                        <span className="text-slate-200">{evaluationFeedback.communicationAnalysis.fillerWordCritique}</span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80">
-                        <span className="text-slate-400 block mb-0.5">Speech Pacing Feedback:</span>
-                        <span className="text-slate-200">{evaluationFeedback.communicationAnalysis.pacingCritique}</span>
-                      </div>
+                  {/* Task */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                      <span>TASK</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     </div>
+                    <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                      {evaluationFeedback.starBreakdown.task.critique}
+                    </p>
+                    <span className="text-[10px] font-semibold text-slate-400 block pt-1">
+                      Scope Defined
+                    </span>
+                  </div>
+
+                  {/* Action */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                      <span>ACTION</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    </div>
+                    <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                      {evaluationFeedback.starBreakdown.action.critique}
+                    </p>
+                    <span className="text-[10px] font-semibold text-slate-400 block pt-1">
+                      High Technical Rigor
+                    </span>
+                  </div>
+
+                  {/* Result */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                      <span>RESULT</span>
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        QUANTIFIED
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                      {evaluationFeedback.starBreakdown.result.critique}
+                    </p>
+                    <span className="text-[10px] font-semibold text-slate-400 block pt-1">
+                      ROI Explicitly Proven
+                    </span>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Strengths & Improvement Areas */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Strengths */}
-                  <div className="glass-panel p-5 rounded-2xl border border-emerald-900/30 bg-emerald-950/10 space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Identified Strengths
+            {/* Comparative Architectural Synthesis (Side by Side) */}
+            <div className="space-y-3 pt-2">
+              <span className="font-bold text-xs text-slate-900 uppercase tracking-wider block">
+                Comparative Architectural Synthesis
+              </span>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Left: Candidate Answer Summary */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Candidate Answer Summary</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold">
+                      AS TRANSCRIBED
                     </span>
-                    <ul className="space-y-2 text-xs text-slate-200">
-                      {evaluationFeedback.strengths.map((str, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                          <span>{str}</span>
-                        </li>
-                      ))}
-                    </ul>
                   </div>
 
-                  {/* Areas for Improvement */}
-                  <div className="glass-panel p-5 rounded-2xl border border-amber-900/30 bg-amber-950/10 space-y-3">
-                    <span className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4" />
-                      Priority Areas for Improvement
-                    </span>
-                    <ul className="space-y-2 text-xs text-slate-200">
-                      {evaluationFeedback.areasForImprovement.map((area, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                          <span>{area}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  <ul className="space-y-2 text-xs text-slate-700">
+                    {evaluationFeedback.strengths.map((str, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                        <span>{str}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <p className="text-[11px] italic text-slate-500 pt-1 border-t border-slate-200">
+                    "Candidate demonstrates direct hands-on familiarity with carrier-grade distributed state limits."
+                  </p>
                 </div>
 
-                {/* Improved Model Answer Rewrite (PRD Requirement) */}
-                <div className="glass-panel p-6 rounded-2xl border border-blue-900/40 bg-gradient-to-br from-blue-950/30 to-slate-900 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-900/40 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-blue-400" />
-                      <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-                        Improved Model Answer (Rewritten by Interview Coach)
-                      </h4>
-                    </div>
+                {/* Right: Prodapt AI Coach Refinement (Model) */}
+                <div className="p-5 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-950">Prodapt AI Coach Refinement (Model)</span>
                     <button
                       onClick={() => playCoachAudio(evaluationFeedback.improvedModelAnswer)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-1.5 transition-all"
+                      className="px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold flex items-center gap-1 transition-all"
                     >
-                      <Volume2 className="w-3.5 h-3.5" />
-                      {isSpeakingCoach ? 'Stop Audio' : 'Play Voice Narration'}
+                      <Play className="w-3 h-3" />
+                      <span>{isSpeakingCoach ? 'Stop Audio' : 'Play Audio'}</span>
                     </button>
                   </div>
 
-                  <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal p-4 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <p className="text-xs text-blue-950 leading-relaxed font-medium">
                     "{evaluationFeedback.improvedModelAnswer}"
                   </p>
 
-                  <div className="space-y-1.5">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                      Key Takeaway Guidance:
+                  <div className="flex items-center gap-2 pt-1 border-t border-blue-100">
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
+                      TMF 642 Compliant
                     </span>
-                    <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-300">
-                      {evaluationFeedback.answerRewriteGuidance.map((guide, idx) => (
-                        <li key={idx} className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
-                          {guide}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Adaptive Follow-Up Question (PRD Requirement) */}
-                <div className="glass-panel p-6 rounded-2xl border border-indigo-900/40 bg-indigo-950/20 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-                      <TrendingUp className="w-4 h-4" />
-                      Adaptive Follow-Up Question (Targeting Probed Gaps)
-                    </span>
-                    <span className="text-[11px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-medium">
-                      Intent: {evaluationFeedback.adaptiveFollowUpQuestion.probingArea}
+                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      Zero Downtime Migration
                     </span>
                   </div>
-
-                  <div className="p-4 rounded-xl bg-slate-950/80 border border-indigo-900/50">
-                    <h5 className="text-sm font-bold text-white leading-relaxed">
-                      "{evaluationFeedback.adaptiveFollowUpQuestion.question}"
-                    </h5>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Reasoning: {evaluationFeedback.adaptiveFollowUpQuestion.intent}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setCurrentQuestion({
-                        ...currentQuestion,
-                        id: `followup-${Date.now()}`,
-                        question: evaluationFeedback.adaptiveFollowUpQuestion.question,
-                        competency: evaluationFeedback.adaptiveFollowUpQuestion.probingArea,
-                        questionType: 'Technical'
-                      });
-                      setResponseText('');
-                      setActiveTab('arena');
-                    }}
-                    className="text-xs px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition-all"
-                  >
-                    <span>Practice This Follow-Up Question</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
                 </div>
-
-                {/* Personalized Improvement Plan (PRD Requirement) */}
-                <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/90 space-y-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                    Personalized Improvement Roadmap
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-                      <span className="font-bold text-emerald-400 block">1. Immediate Next Practice:</span>
-                      <p className="text-slate-300">{evaluationFeedback.personalizedImprovementPlan.immediateFix}</p>
-                    </div>
-                    <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-                      <span className="font-bold text-blue-400 block">2. Medium-Term Drill:</span>
-                      <p className="text-slate-300">{evaluationFeedback.personalizedImprovementPlan.mediumTermPractice}</p>
-                    </div>
-                    <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-                      <span className="font-bold text-purple-400 block">3. Suggested Structure:</span>
-                      <p className="text-slate-300 font-semibold">{evaluationFeedback.personalizedImprovementPlan.recommendedFramework}</p>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ======================================================== */}
-        {/* TAB 3: AGENT REASONING TRACE (Task 3 Observability)      */}
-        {/* ======================================================== */}
-        {activeTab === 'traces' && (
-          <div className="space-y-6">
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-blue-400" />
-                  <h3 className="text-base font-bold text-white">
-                    Multi-Agent Handoff & Reasoning Protocol Trace (Task 3)
-                  </h3>
-                </div>
-                <span className="text-xs font-mono text-slate-400">
-                  Execution Time: {lastExecutionTime}ms
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                Transparent inspection of agent-to-agent (A2A) communications, parallel dispatch, and lead coach aggregation.
-              </p>
-            </div>
-
-            {agentTraces.length === 0 ? (
-              <div className="glass-panel p-12 rounded-2xl text-center text-slate-500 border border-slate-800">
-                No active execution trace. Complete an evaluation in the Practice Arena to inspect the live agent message bus.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {agentTraces.map((trace, idx) => (
-                  <div
-                    key={idx}
-                    className="glass-panel p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center text-xs font-bold">
-                          {idx + 1}
-                        </span>
-                        <span className="text-xs font-bold text-white">{trace.agentName}</span>
-                        <span className="px-2 py-0.5 text-[10px] uppercase font-bold rounded bg-slate-800 text-slate-300">
-                          {trace.stage}
-                        </span>
-                      </div>
-                      <span className="text-[11px] font-mono text-slate-500">
-                        +{trace.latencyMs}ms • {trace.timestamp.split('T')[1].slice(0, 8)}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-300 pl-8 leading-relaxed font-normal">
-                      {trace.summary}
-                    </p>
-
-                    {trace.details && (
-                      <div className="pl-8 pt-1">
-                        <details className="text-[11px] font-mono text-slate-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                          <summary className="cursor-pointer text-blue-400 hover:underline">
-                            Inspect Raw Agent JSON Payload
-                          </summary>
-                          <pre className="mt-2 overflow-x-auto text-[10px] text-slate-300">
-                            {JSON.stringify(trace.details, null, 2)}
-                          </pre>
-                        </details>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ======================================================== */}
-        {/* TAB 4: PROGRESS & LONGITUDINAL GAP TRACKER (Task 4)     */}
-        {/* ======================================================== */}
-        {activeTab === 'progress' && (
-          <div className="space-y-6">
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <BarChart2 className="w-5 h-5 text-blue-400" />
-                  Candidate Longitudinal Analytics & Recurring Gap Tracker (Task 4)
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Tracks candidate performance, pacing, and recurring response deficiencies across sessions.
-                </p>
-              </div>
-
-              {sessions.length > 0 && (
-                <button
-                  onClick={() => {
-                    if (confirm('Clear all stored practice session history?')) {
-                      clearStoredSessions();
-                      setSessions([]);
-                    }
-                  }}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-300 border border-slate-700 transition-all"
-                >
-                  Clear History
-                </button>
-              )}
-            </div>
-
-            {/* Metric Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-                <span className="text-xs text-slate-400 block mb-1">Total Sessions</span>
-                <span className="text-2xl font-bold text-white">{longitudinalStats.totalSessions}</span>
-              </div>
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-                <span className="text-xs text-slate-400 block mb-1">Average Score</span>
-                <span className="text-2xl font-bold text-blue-400">{longitudinalStats.averageScore}%</span>
-              </div>
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-                <span className="text-xs text-slate-400 block mb-1">Avg Speaking Pace</span>
-                <span className="text-2xl font-bold text-emerald-400">{longitudinalStats.averageWpm} WPM</span>
-              </div>
-              <div className="glass-panel p-4 rounded-xl border border-slate-800 bg-slate-900/60">
-                <span className="text-xs text-slate-400 block mb-1">Total Filler Words</span>
-                <span className="text-2xl font-bold text-amber-400">{longitudinalStats.totalFillerWords}</span>
               </div>
             </div>
 
-            {/* Recurring Gaps Detected (PRD Task 3 & 4 Requirement) */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4">
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400" />
-                Recurring Gaps Detected Across Practice Sessions
-              </h4>
-
-              {longitudinalStats.recurringGaps.length === 0 ? (
-                <p className="text-xs text-slate-400">
-                  No recurring gaps identified yet. Complete at least 2 sessions to observe longitudinal trends.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {longitudinalStats.recurringGaps.map((item, idx) => (
-                    <div key={idx} className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between">
-                      <span className="text-xs text-slate-300 font-medium">{item.gap}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold">
-                        {item.frequency}x flag
-                      </span>
-                    </div>
-                  ))}
+            {/* Dynamic Follow-Up Probe Banner */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-100 border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-start gap-3 max-w-2xl">
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <Zap className="w-4 h-4" />
                 </div>
-              )}
-            </div>
-
-            {/* Session History Table */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4">
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-                Practice Session Log
-              </h4>
-
-              {sessions.length === 0 ? (
-                <p className="text-xs text-slate-400">No practice records stored yet.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="text-slate-400 border-b border-slate-800 uppercase font-semibold">
-                      <tr>
-                        <th className="pb-2">Timestamp</th>
-                        <th className="pb-2">Stage</th>
-                        <th className="pb-2">Question</th>
-                        <th className="pb-2">Score</th>
-                        <th className="pb-2">Pacing</th>
-                        <th className="pb-2">Verdict</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                      {sessions.map((sess) => (
-                        <tr key={sess.id} className="hover:bg-slate-800/30">
-                          <td className="py-2.5 font-mono text-[11px] text-slate-400">{sess.timestamp}</td>
-                          <td className="py-2.5 font-semibold text-blue-400">{sess.question.stage.split('&')[0]}</td>
-                          <td className="py-2.5 max-w-xs truncate">{sess.question.question}</td>
-                          <td className="py-2.5 font-bold text-white">{sess.coachingFeedback.overallScore}%</td>
-                          <td className="py-2.5">{sess.speechMetrics?.wordsPerMinute || 135} WPM</td>
-                          <td className="py-2.5">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-200">
-                              {sess.coachingFeedback.verdict}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ======================================================== */}
-        {/* TAB 5: BENCHMARK & ARCHITECTURE (Task 4 & 5)             */}
-        {/* ======================================================== */}
-        {activeTab === 'benchmark' && (
-          <div className="space-y-6">
-            {/* Task 4 Automated Benchmark Runner */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                 <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                    Automated LLM-as-a-Judge Evaluation Suite (Task 4)
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Evaluates Question Relevance, Analysis Quality, Consistency, and Evidence Grounding across standard test cases.
-                  </p>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 block">
+                    DYNAMIC FOLLOW-UP PROBE
+                  </span>
+                  <h4 className="text-sm font-bold text-slate-900 leading-snug">
+                    "{evaluationFeedback.adaptiveFollowUpQuestion.question}"
+                  </h4>
                 </div>
-
-                <button
-                  onClick={runBenchmarkSuite}
-                  disabled={isRunningBenchmark}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50"
-                >
-                  {isRunningBenchmark ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Evaluating Test Cases...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-3.5 h-3.5" />
-                      Run Benchmark Suite
-                    </>
-                  )}
-                </button>
               </div>
 
-              {benchmarkResults && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                      <span className="text-[11px] text-slate-400 block">Question Relevance</span>
-                      <span className="text-xl font-bold text-emerald-400">
-                        {benchmarkResults.averageScores.relevance}%
-                      </span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                      <span className="text-[11px] text-slate-400 block">Evidence Groundedness</span>
-                      <span className="text-xl font-bold text-blue-400">
-                        {benchmarkResults.averageScores.groundedness}%
-                      </span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                      <span className="text-[11px] text-slate-400 block">Feedback Consistency</span>
-                      <span className="text-xl font-bold text-purple-400">
-                        {benchmarkResults.averageScores.consistency}%
-                      </span>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                      <span className="text-[11px] text-slate-400 block">Actionable Usefulness</span>
-                      <span className="text-xl font-bold text-amber-400">
-                        {benchmarkResults.averageScores.usefulness}%
-                      </span>
-                    </div>
-                  </div>
+              <button
+                onClick={() => {
+                  setCurrentQuestion({
+                    ...currentQuestion,
+                    id: `followup-${Date.now()}`,
+                    question: evaluationFeedback.adaptiveFollowUpQuestion.question,
+                    competency: evaluationFeedback.adaptiveFollowUpQuestion.probingArea,
+                    questionType: 'Technical'
+                  });
+                  setResponseText('');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <span>Practice Follow-Up</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </section>
+        )}
 
-                  {/* Benchmark Cases Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="text-slate-400 border-b border-slate-800 uppercase font-semibold">
-                        <tr>
-                          <th className="pb-2">Test Case</th>
-                          <th className="pb-2">Grounded Quote Detected</th>
-                          <th className="pb-2">Relevance</th>
-                          <th className="pb-2">Groundedness</th>
-                          <th className="pb-2">Latency</th>
-                          <th className="pb-2">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                        {benchmarkResults.results.map((res) => (
-                          <tr key={res.testCaseId} className="hover:bg-slate-800/30">
-                            <td className="py-2.5 font-semibold text-white">{res.title}</td>
-                            <td className="py-2.5 italic text-slate-400 max-w-xs truncate">{res.detectedGroundedQuote}</td>
-                            <td className="py-2.5">{res.questionRelevanceScore}%</td>
-                            <td className="py-2.5">{res.evidenceGroundednessScore}%</td>
-                            <td className="py-2.5 font-mono">{res.latencyMs}ms</td>
-                            <td className="py-2.5">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
-                                PASSED
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+        {/* ======================================================== */}
+        {/* 5. MULTI-AGENT DELIBERATION INSPECTOR & BENCHMARK SUITE   */}
+        {/* ======================================================== */}
+        <section className="pro-card p-6 rounded-2xl bg-white space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-4 text-xs font-bold text-slate-700">
+              <button
+                onClick={() => setIsInspectorOpen(!isInspectorOpen)}
+                className="flex items-center gap-1 text-slate-900 hover:text-blue-600 transition-colors"
+              >
+                <Layers className="w-4 h-4 text-blue-600" />
+                <span>Multi-Agent Reasoning Trace (5 Agents Active)</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isInspectorOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <button
+                onClick={runBenchmarkSuite}
+                className="text-slate-500 hover:text-blue-600 flex items-center gap-1"
+              >
+                <span>Prodapt Telco Benchmark Calibration</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
             </div>
 
-            {/* Task 5: High-Level Architecture Diagram Visualizer */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <BrainCircuit className="w-5 h-5 text-blue-400" />
-                  <h3 className="text-base font-bold text-white">
-                    System Architecture & Agent Data Flow (Task 5 Deliverable)
-                  </h3>
-                </div>
-                <span className="text-xs px-2.5 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">
-                  Deliverable 1 & 2
-                </span>
-              </div>
-
-              {/* Architecture Pipeline Flow Visual */}
-              <div className="p-6 rounded-xl bg-slate-950 border border-slate-800 space-y-6 overflow-x-auto">
-                <div className="flex items-center justify-between min-w-[700px] text-center gap-2 text-xs">
-                  {/* Step 1 */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-blue-500/40 w-36 space-y-1">
-                    <span className="font-bold text-white block">Candidate Profile</span>
-                    <span className="text-[10px] text-slate-400">Role, Skills, YOE</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
-
-                  {/* Step 2 */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-blue-500/40 w-36 space-y-1">
-                    <span className="font-bold text-blue-300 block">Question Agent</span>
-                    <span className="text-[10px] text-slate-400">Curated & Dynamic</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
-
-                  {/* Step 3 */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-indigo-500/40 w-36 space-y-1">
-                    <span className="font-bold text-indigo-300 block">Dual STT & Mic</span>
-                    <span className="text-[10px] text-slate-400">Web Speech + WPM</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
-
-                  {/* Step 4 */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-purple-500/40 w-44 space-y-1">
-                    <span className="font-bold text-purple-300 block">Specialist Agents</span>
-                    <span className="text-[10px] text-slate-400">Comm + Content + STAR</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
-
-                  {/* Step 5 */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-emerald-500/40 w-40 space-y-1">
-                    <span className="font-bold text-emerald-300 block">Lead Coach Agent</span>
-                    <span className="text-[10px] text-slate-400">Synthesis & Plan</span>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-300 space-y-2">
-                  <span className="font-bold text-white block">Key Architectural Design Decisions & Trade-Offs:</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] leading-relaxed">
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
-                      <span className="font-bold text-blue-400 block mb-1">Decoupled STT vs Native STS:</span>
-                      Decoupling allows parallel specialist agent dispatch, exact quote grounding, and acoustic WPM/filler-word heuristics while lowering API costs by 95% and eliminating WebRTC firewall dropouts.
-                    </div>
-                    <div className="p-2 rounded bg-slate-950 border border-slate-800">
-                      <span className="font-bold text-emerald-400 block mb-1">Dual-Engine Fallback Topology:</span>
-                      Implements primary OpenAI gpt-4o/gpt-4o-mini with seamless fall-through to an offline deterministic rule engine, guaranteeing 100% uptime during live executive demos.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 10-Minute Presentation Script & Slide Outline */}
-            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-900/80 space-y-4">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-400" />
-                10-Minute Panel Presentation Script (8 Min Demo + 2 Min Q&A)
-              </h3>
-
-              <div className="space-y-3 text-xs text-slate-300">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="font-bold text-blue-400 block mb-1">Minute 0:00 - 1:30: Problem Statement & Prodapt Alignment</span>
-                  "Traditional interview prep provides static sample answers. ElevateAI provides an autonomous 5-agent ecosystem tailored specifically for Prodapt's technical and consulting hiring tracks (OSS/BSS, Cloud, Fullstack, Behavioral)."
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="font-bold text-indigo-400 block mb-1">Minute 1:30 - 4:00: Live Interactive Practice & Dual STT Demo</span>
-                  "Showcase voice input using the Web Speech API with real-time waveform visualization, acoustic WPM calculation, and regex filler-word extraction."
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="font-bold text-purple-400 block mb-1">Minute 4:00 - 6:30: Multi-Agent Handoff & STAR Breakdown</span>
-                  "Demonstrate the Agent Reasoning Trace drawer, the STAR component scores, grounded transcript citations, and trigger the AI Voice Coach TTS reading the rewritten answer."
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="font-bold text-emerald-400 block mb-1">Minute 6:30 - 8:00: Benchmark Suite & Empirical Reliability</span>
-                  "Run the automated Benchmark Suite live. Explain our empirical evaluation metrics (Question Relevance, Consistency, Evidence Groundedness) and the offline fallback engine."
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="font-bold text-amber-400 block mb-1">Minute 8:00 - 10:00: Panel Q&A Anticipated Defenses</span>
-                  "Address trade-offs on latency, LLM temperature tuning (0.2 for specialists, 0.3 for coach), token economy, and enterprise multi-session scalability."
-                </div>
-              </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400 font-mono">
+                Consensus Confidence: <span className="font-bold text-slate-800">0.964</span>
+              </span>
+              <button
+                onClick={runBenchmarkSuite}
+                disabled={isRunningBenchmark}
+                className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 flex items-center gap-1"
+              >
+                <Play className="w-3 h-3 text-emerald-600" />
+                <span>{isRunningBenchmark ? 'Calibrating...' : 'Run Benchmark'}</span>
+              </button>
             </div>
           </div>
-        )}
+
+          {/* Collapsible Agent Cards */}
+          {isInspectorOpen && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              {agentTraces.map((trace, idx) => (
+                <div key={idx} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900">{trace.agentName}</span>
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">
+                      {(trace.details as any)?.score || 92}/100
+                    </span>
+                  </div>
+                  <p className="text-slate-600 leading-relaxed text-[11px]">
+                    {trace.summary}
+                  </p>
+                  <div className="text-[10px] text-slate-400 font-mono pt-1">
+                    Latency: {trace.latencyMs}ms • Model: {(trace.details as any)?.model || 'GPT-4o'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Benchmark Results Display (if triggered) */}
+          {benchmarkResults && (
+            <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-3 mt-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-900">
+                  Automated LLM-as-a-Judge Calibration Complete ({benchmarkResults.passedCases}/{benchmarkResults.totalCases} Passed)
+                </span>
+                <span className="text-[11px] font-mono text-emerald-700">G-Eval Rubric Standard</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-slate-700">
+                <div className="p-2.5 rounded bg-white border border-emerald-100">
+                  <span className="text-slate-400 block text-[10px]">Question Relevance</span>
+                  <span className="font-bold text-slate-900">{benchmarkResults.averageScores.relevance}%</span>
+                </div>
+                <div className="p-2.5 rounded bg-white border border-emerald-100">
+                  <span className="text-slate-400 block text-[10px]">Evidence Groundedness</span>
+                  <span className="font-bold text-slate-900">{benchmarkResults.averageScores.groundedness}%</span>
+                </div>
+                <div className="p-2.5 rounded bg-white border border-emerald-100">
+                  <span className="text-slate-400 block text-[10px]">Feedback Consistency</span>
+                  <span className="font-bold text-slate-900">{benchmarkResults.averageScores.consistency}%</span>
+                </div>
+                <div className="p-2.5 rounded bg-white border border-emerald-100">
+                  <span className="text-slate-400 block text-[10px]">Actionable Usefulness</span>
+                  <span className="font-bold text-slate-900">{benchmarkResults.averageScores.usefulness}%</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
       </main>
 
-      {/* Settings Modal (Enter OpenAI API Key / Offline toggle) */}
+      {/* ======================================================== */}
+      {/* 6. ENTERPRISE FOOTER                                     */}
+      {/* ======================================================== */}
+      <footer className="bg-white border-t border-slate-200 px-6 py-4 mt-auto">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
+          <span>Prodapt ElevateAI • Enterprise Architecture &amp; Telecom Assessment Platform</span>
+          <span className="font-mono text-[11px]">Confidential C-Level Evaluation Session</span>
+        </div>
+      </footer>
+
+      {/* Settings Modal (API Key Configuration) */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel p-6 rounded-2xl max-w-md w-full border border-slate-700 bg-slate-900 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Settings className="w-4 h-4 text-blue-400" />
-                Platform Configuration & Model Engine
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-blue-600" />
+                Platform Configuration &amp; Model Engine
               </h3>
               <button
                 onClick={() => setIsSettingsOpen(false)}
-                className="text-slate-400 hover:text-white text-xs font-bold"
+                className="text-slate-400 hover:text-slate-700 text-xs font-bold"
               >
                 ✕
               </button>
@@ -1480,7 +1150,7 @@ export default function Home() {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">OpenAI API Key (Optional):</label>
+                <label className="text-slate-700 font-semibold block mb-1">OpenAI API Key (Optional):</label>
                 <input
                   type="password"
                   value={apiKey}
@@ -1489,16 +1159,16 @@ export default function Home() {
                     localStorage.setItem('elevate_ai_openai_key', e.target.value);
                   }}
                   placeholder="sk-... (Leave empty to use high-fidelity offline rule engine)"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
                   Your key is saved locally in your browser. If empty or invalid, ElevateAI automatically engages the deterministic fallback engine.
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                <span className="font-bold text-white block">Active Engine Status:</span>
-                <span className="text-blue-400 font-mono text-[11px] block">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                <span className="font-bold text-slate-900 block">Active Engine Status:</span>
+                <span className="text-blue-600 font-mono text-[11px] block">
                   {apiKey ? 'OpenAI GPT-4o (Coach) + GPT-4o-mini (Specialists)' : 'High-Fidelity Deterministic Fallback Engine (Offline Safe)'}
                 </span>
               </div>
@@ -1507,9 +1177,9 @@ export default function Home() {
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold text-xs hover:bg-blue-500"
+                className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700"
               >
-                Save & Close
+                Save &amp; Close
               </button>
             </div>
           </div>

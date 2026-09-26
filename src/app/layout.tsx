@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ElevateAI — Multi-Agent Communication & Interview Coaching Platform',
-  description: 'AI-powered Communication & Interview Coaching System featuring 5 specialist agents, STAR evaluation, speech heuristics, and automated benchmark scoring.',
+  title: 'ElevateAI — Enterprise Assessment & AI Interview Coaching Platform',
+  description: 'AI-Powered Communication & Interview Coaching Platform for Prodapt Enterprise Evaluation featuring 5 Specialist Autonomous Agents.',
 };
 
 export default function RootLayout({
@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="antialiased min-h-screen text-slate-100 selection:bg-blue-600 selection:text-white">
+    <html lang="en">
+      <body className="antialiased min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white">
         {children}
       </body>
     </html>
