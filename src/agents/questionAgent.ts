@@ -26,7 +26,9 @@ export async function selectOrGenerateQuestion(
   }
 
   // Dynamic Generation via OpenAI (or smart fallback)
-  const effectiveApiKey = userApiKey || process.env.OPENAI_API_KEY;
+  const effectiveApiKey = userApiKey || process.env.OPENAI_API_KEY || '';
+  const effectiveBaseUrl = process.env.OPENAI_BASE_URL || 'https://aicredits.in/v1';
+  const effectiveModel = process.env.OPENAI_MODEL || 'openai/gpt-5-nano';
 
   if (!effectiveApiKey) {
     // Deterministic fallback question generator
@@ -53,7 +55,10 @@ export async function selectOrGenerateQuestion(
   }
 
   try {
-    const openai = new OpenAI({ apiKey: effectiveApiKey });
+    const openai = new OpenAI({
+      apiKey: effectiveApiKey,
+      baseURL: effectiveBaseUrl,
+    });
     const prompt = `You are the Interview Question Agent for an executive technical coaching platform.
 Generate a tailored interview question for this candidate profile:
 Role: ${profile.targetRole}
@@ -76,7 +81,7 @@ Return ONLY valid JSON matching this structure:
 }`;
 
     const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: effectiveModel,
       messages: [{ role: 'system', content: prompt }],
       response_format: { type: 'json_object' },
       temperature: 0.7

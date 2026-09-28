@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { selectOrGenerateQuestion } from '@/lib/agents/questionAgent';
+import { selectOrGenerateQuestion } from '@/agents/questionAgent';
 import { CandidateProfile, StageType } from '@/types/interview';
 
 export async function POST(req: NextRequest) {

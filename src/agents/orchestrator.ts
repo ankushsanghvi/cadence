@@ -25,7 +25,9 @@ export async function runMultiAgentInterviewCoaching(
   const startTime = Date.now();
   const traces: AgentTraceMessage[] = [];
 
-  const effectiveApiKey = userApiKey || process.env.OPENAI_API_KEY;
+  const effectiveApiKey = userApiKey || process.env.OPENAI_API_KEY || '';
+  const effectiveBaseUrl = process.env.OPENAI_BASE_URL || 'https://aicredits.in/v1';
+  const effectiveModel = process.env.OPENAI_MODEL || 'openai/gpt-5-nano';
 
   // Trace 1: Question & Profile Setup
   traces.push({
@@ -68,7 +70,8 @@ export async function runMultiAgentInterviewCoaching(
   }
 
   const openai = new OpenAI({
-    apiKey: effectiveApiKey
+    apiKey: effectiveApiKey,
+    baseURL: effectiveBaseUrl,
   });
 
   try {
@@ -132,19 +135,19 @@ Return ONLY valid JSON matching this structure:
     // Parallel Dispatch of Specialist Agents
     const [commRes, contentRes, starRes] = await Promise.all([
       openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: effectiveModel,
         messages: [{ role: 'system', content: commAgentPrompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2
       }),
       openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: effectiveModel,
         messages: [{ role: 'system', content: contentAgentPrompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2
       }),
       openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: effectiveModel,
         messages: [{ role: 'system', content: starAgentPrompt }],
         response_format: { type: 'json_object' },
         temperature: 0.2
@@ -248,7 +251,7 @@ Return ONLY valid JSON matching this exact structure:
 
     const coachStart = Date.now();
     const coachRes = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: effectiveModel,
       messages: [{ role: 'system', content: coachPrompt }],
       response_format: { type: 'json_object' },
       temperature: 0.3

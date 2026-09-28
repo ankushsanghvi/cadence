@@ -1,5 +1,5 @@
 import { BenchmarkTestCase, BenchmarkResult } from '@/types/interview';
-import { runMultiAgentInterviewCoaching } from '@/lib/agents/orchestrator';
+import { runMultiAgentInterviewCoaching } from '@/agents/orchestrator';
 
 export async function runSingleBenchmarkTest(
   testCase: BenchmarkTestCase,

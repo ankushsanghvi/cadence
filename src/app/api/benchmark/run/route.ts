@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BENCHMARK_TEST_CASES } from '@/data/benchmarkDataset';
-import { runSingleBenchmarkTest } from '@/lib/evaluation/benchmarkRunner';
+import { runSingleBenchmarkTest } from '@/server/evaluation/benchmarkRunner';
 import { BenchmarkResult } from '@/types/interview';
 
 export async function POST(req: NextRequest) {

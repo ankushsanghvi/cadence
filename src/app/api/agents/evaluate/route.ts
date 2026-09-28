@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runMultiAgentInterviewCoaching } from '@/lib/agents/orchestrator';
+import { runMultiAgentInterviewCoaching } from '@/agents/orchestrator';
 import { CandidateProfile, InterviewQuestion, SpeechMetrics } from '@/types/interview';
 
 export async function POST(req: NextRequest) {

@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import AppProviders from '@/components/AppProviders';
 
 export const metadata: Metadata = {
-  title: 'ElevateAI — Enterprise Assessment & AI Interview Coaching Platform',
-  description: 'AI-Powered Communication & Interview Coaching Platform for Prodapt Enterprise Evaluation featuring 5 Specialist Autonomous Agents.',
+  title: 'Cadence — AI Communication & Interview Coaching',
+  description: 'Cadence — AI-powered communication & interview coaching. Practice real questions, get structured multi-agent feedback on clarity, structure and content, and track your improvement.',
 };
 
 export default function RootLayout({
@@ -13,9 +14,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased min-h-screen bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white">
-        {children}
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="bg-paper text-ink font-sans antialiased min-h-screen">
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );
 }
+
