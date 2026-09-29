@@ -155,3 +155,35 @@ export function getRecommendedResources({ scores = {}, role, weaknesses = [], we
     }));
   }).filter((resource) => !seen.has(resource.url) && (seen.add(resource.url) || true)).slice(0, 5);
 }
+
+type PersistedTurn = { question?: { text?: string; question?: string; competency?: string }; result?: { scores?: { relevance?: number; completeness?: number; communication?: number; clarity?: number; structure?: number }; improvements?: string[] } };
+type PersistedSession = { turns?: PersistedTurn[] };
+
+const technicalTopicFor = (text: string) => {
+  if (/system design|architecture|scal|cache|queue|distributed|trade-?off/.test(text)) return 'system-design';
+  if (/fastapi|api|backend|endpoint|python/.test(text)) return 'fastapi';
+  if (/sql|query|database|index|join/.test(text)) return 'sql';
+  if (/kubernetes|docker|cloud|devops|ci\/cd|deploy/.test(text)) return 'devops';
+  if (/pandas|data analysis|dashboard|data quality/.test(text)) return 'pandas';
+  return undefined;
+};
+
+/** Uses only persisted low-scoring turn evaluations and their question evidence. */
+export function getPlanResources(sessions: PersistedSession[]) {
+  const counts = new Map<string, { count: number; reason: string }>();
+  for (const turn of sessions.flatMap((session) => Array.isArray(session.turns) ? session.turns : [])) {
+    const scores = turn.result?.scores;
+    const improvementText = (turn.result?.improvements || []).join(' ').toLowerCase();
+    const questionText = `${turn.question?.text || turn.question?.question || ''} ${turn.question?.competency || ''}`.toLowerCase();
+    const technicalWeak = (typeof scores?.relevance === 'number' && scores.relevance < 70) || (typeof scores?.completeness === 'number' && scores.completeness < 70) || /depth|technical|architecture|api|python|sql|cloud|debug/.test(improvementText);
+    const topic = technicalWeak ? technicalTopicFor(`${questionText} ${improvementText}`) : undefined;
+    if (topic) {
+      const current = counts.get(topic) || { count: 0, reason: '' };
+      current.count += 1;
+      current.reason = `Recommended because ${RESOURCE_LIBRARY[topic].label} depth was weak in ${current.count} technical answer${current.count === 1 ? '' : 's'}.`;
+      counts.set(topic, current);
+    }
+    if (typeof scores?.structure === 'number' && scores.structure < 70) counts.set('star', { count: (counts.get('star')?.count || 0) + 1, reason: `Recommended because answer structure was weak in ${(counts.get('star')?.count || 0) + 1} answers.` });
+  }
+  return [...counts.entries()].sort((a, b) => b[1].count - a[1].count).flatMap(([topic, detail]) => RESOURCE_LIBRARY[topic].items.map((item, index) => ({ id: `plan-${topic}-${index}`, type: item.type === 'docs' ? 'Documentation' : item.type === 'youtube' ? 'YouTube' : 'Article', title: item.label, url: item.url, topic: RESOURCE_LIBRARY[topic].label, source: item.source, duration: item.type === 'youtube' ? '12–20 min' : '15 min', reason: detail.reason }))).slice(0, 5);
+}

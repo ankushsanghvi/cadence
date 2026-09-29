@@ -48,8 +48,12 @@ export function profile(sessions = loadSessions()) {
   const starRate = Math.round(
     (sessions.filter((s) => (s.starFilled || 0) >= 3).length / sessions.length) * 100
   );
-  const trend = sorted.slice(-10).map((s) => ({
-    date: new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+  // A chart point is only emitted for a real, finite completed-session score.
+  // Include time and the stable id so same-day sessions never collapse onto a
+  // single categorical x-value.
+  const trend = sorted.filter((s) => Number.isFinite(s.overall) && s.overall >= 0 && s.overall <= 100).slice(-10).map((s) => ({
+    date: new Date(s.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+    sessionId: s.id,
     score: s.overall,
   }));
 

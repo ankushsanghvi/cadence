@@ -3,7 +3,7 @@
 import { Link } from "@/lib/routerCompat";
 import { ArrowRight, CalendarClock, Dumbbell, TrendingUp } from "lucide-react";
 import { loadSessions, profile } from "@/lib/store";
-import { recommendedTopics } from "@/lib/resources";
+import { getPlanResources, recommendedTopics } from "@/lib/resources";
 import { IMPROVEMENT_DRILLS } from "@/lib/improvementPlan";
 import ResourceList from "@/components/ResourceList";
 import { Reveal } from "@/components/ui-bits";
@@ -16,11 +16,14 @@ const GENERIC = [
 
 export default function Plan() {
   const [p, setP] = useState<any>({ index: 0, avg: 0, starRate: 0, streak: 0, trend: [], gaps: [], weekCount: 0, total: 0 });
+  const [sessions, setSessions] = useState<any[]>([]);
 
   useEffect(() => {
     const s = loadSessions();
+    setSessions(s);
     setP(profile(s));
   }, []);
+  const planResources = getPlanResources(sessions);
 
   const milestones = [
     ...(p.gaps || []).slice(0, 2).map((g: any) => ({
@@ -138,7 +141,7 @@ export default function Plan() {
             this is where you fix it.
           </p>
           <div className="mt-6">
-            <ResourceList topics={recommendedTopics({ gaps: p.gaps })} testPrefix="plan-resources" />
+            <ResourceList resources={planResources} topics={planResources.length ? [] : recommendedTopics({ gaps: p.gaps })} testPrefix="plan-resources" />
           </div>
         </section>
       </Reveal>

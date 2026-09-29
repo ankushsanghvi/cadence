@@ -20,6 +20,8 @@ import { enhanceSpecialistWithLLM } from '@/server/evaluation/specialistEvaluato
 import { deriveReviewWeaknesses, sessionRoadmap } from '@/lib/sessionReview';
 import { filterSessions, SESSION_FILTERS, sessionFilterCategories, sessionMatchesFilter } from '@/lib/sessionFilters';
 import { POST as runBenchmark } from '@/app/api/benchmark/run/route';
+import { getPlanResources } from '@/lib/resources';
+import { profile as sessionProfile } from '@/lib/store';
 
 const knowledge: ResumeKnowledgeModel = {
   candidate: { name: 'Test Candidate', email: 'candidate@example.com', phone: '', location: '', summary: '' },
@@ -389,4 +391,20 @@ test('benchmark API rejects an unknown case instead of serializing NaN aggregate
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: 'Benchmark test case was not found.' });
+});
+
+test('plan resources follow recurring persisted technical weaknesses without fabricating them', () => {
+  const technical = (text: string, scores = { relevance: 55, completeness: 60, structure: 85 }) => ({ turns: [{ question: { text }, result: { scores, improvements: ['Technical depth needs more detail.'] } }] });
+  assert.ok(getPlanResources([technical('Explain API backend system design.'), technical('Explain API backend system design.')]).some((item) => /FastAPI|System design/.test(item.topic)));
+  assert.ok(getPlanResources([{ turns: [{ question: { text: 'Describe a conflict.' }, result: { scores: { structure: 50 } } }] }]).some((item) => /STAR/.test(item.topic)));
+  assert.ok(getPlanResources([technical('Explain SQL query indexing.'), { turns: [{ question: { text: 'Describe a conflict.' }, result: { scores: { structure: 50 } } }] }]).some((item) => /SQL/.test(item.topic)));
+  assert.equal(getPlanResources([{ turns: [{ question: { text: 'Explain API backend system design.' }, result: { scores: { relevance: 92, completeness: 90, structure: 90 }, improvements: [] } }] }]).some((item) => /FastAPI|System design/.test(item.topic)), false);
+});
+
+test('score trajectory preserves persisted chronological points without invalid values', () => {
+  const sessions = [31, 58, 31, 70].map((overall, index) => ({ id: `s-${index}`, overall, createdAt: `2026-09-29T0${index}:00:00.000Z` }));
+  assert.deepEqual(sessionProfile([sessions[1], sessions[0]]).trend.map((point) => point.score), [31, 58]);
+  assert.deepEqual(sessionProfile([sessions[0], { id: 'missing', overall: Number.NaN, createdAt: '2026-09-29T03:00:00.000Z' }, ...sessions.slice(1)]).trend.map((point) => point.score), [31, 58, 31, 70]);
+  assert.equal(new Set(sessionProfile(sessions.slice(0, 2)).trend.map((point) => point.date)).size, 2);
+  assert.deepEqual(sessionProfile([sessions[0], { ...sessions[0], id: 'same', createdAt: '2026-09-29T00:30:00.000Z' }]).trend.map((point) => point.score), [31, 31]);
 });

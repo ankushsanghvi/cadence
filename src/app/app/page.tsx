@@ -115,7 +115,7 @@ export default function Dashboard() {
                       contentStyle={{ borderRadius: 12, border: "1px solid #E5E0D5", background: "#fff", fontSize: 12 }}
                       formatter={(v) => [v, "Score"]}
                     />
-                    <Area type="monotone" dataKey="score" stroke="#4A7494" strokeWidth={2.5} fill="url(#terra)" />
+                    <Area type="linear" dataKey="score" stroke="#4A7494" strokeWidth={2.5} fill="url(#terra)" dot={{ r: 3, fill: "#4A7494" }} activeDot={{ r: 4 }} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
