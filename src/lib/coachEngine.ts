@@ -148,6 +148,90 @@ export async function runEvaluation(
     followUps: question.followUps || []
   };
 
+  // The browser never receives provider credentials. The API streams actual
+  // pipeline stage transitions so the interview UI can reflect parallel work
+  // as it happens, while keeping the hybrid evaluator server-side.
+  if (typeof window !== 'undefined') {
+    try {
+      const response = await fetch('/api/agents/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: structuredQ,
+          answer,
+          mode: mode || 'text',
+          candidateProfile: profile,
+          stream: true,
+        }),
+      });
+      if (response.ok && response.body && response.headers.get('content-type')?.includes('text/event-stream')) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const event of events) {
+            const eventName = event.match(/^event:\s*(.+)$/m)?.[1];
+            const rawPayload = event.match(/^data:\s*(.+)$/m)?.[1];
+            if (!eventName || !rawPayload) continue;
+            const payload = JSON.parse(rawPayload);
+            if (eventName === 'stage') {
+              onStage?.(payload.id, payload.status, payload.out);
+            } else if (eventName === 'result') {
+              return payload;
+            } else if (eventName === 'error') {
+              throw new Error(payload.message || 'Evaluation failed.');
+            }
+          }
+          if (done) break;
+        }
+        throw new Error('Evaluation stream ended before returning a result.');
+      }
+      if (response.ok) {
+        // Backward-compatible JSON path for deployments that have not yet
+        // rolled out streaming support.
+        const result = await response.json();
+        const latencyFor = (stage: string) =>
+          Number.isFinite(result?.timings?.[stage]) ? result.timings[stage] : undefined;
+
+        onStage?.('question', 'done', {
+          competency: result.competency,
+          difficulty: result.difficulty,
+          latencyMs: latencyFor('question'),
+        });
+        onStage?.('comm', 'done', {
+          clarity: result.scores?.clarity,
+          fillers: result.metrics?.fillers,
+          wpm: result.metrics?.wpm,
+          latencyMs: latencyFor('comm'),
+        });
+        onStage?.('content', 'done', {
+          relevance: result.scores?.relevance,
+          completeness: result.scores?.completeness,
+          latencyMs: latencyFor('content'),
+        });
+        onStage?.('star', 'done', {
+          filled: result.starFilled,
+          structure: result.scores?.structure,
+          latencyMs: latencyFor('star'),
+        });
+        onStage?.('coach', 'done', {
+          overall: result.overall,
+          scores: result.scores,
+          latencyMs: latencyFor('coach'),
+        });
+        return result;
+      }
+    } catch {
+      // Fall through to the existing deterministic browser evaluator.
+    }
+  }
+
   const result = await MultiAgentPipeline.execute(
     {
       question: structuredQ,

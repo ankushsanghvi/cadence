@@ -12,6 +12,13 @@ export async function POST(req: NextRequest) {
       ? BENCHMARK_TEST_CASES.filter(c => c.id === testCaseId)
       : BENCHMARK_TEST_CASES;
 
+    if (testCaseId && casesToRun.length === 0) {
+      return NextResponse.json(
+        { error: 'Benchmark test case was not found.' },
+        { status: 404 },
+      );
+    }
+
     const results: BenchmarkResult[] = [];
     for (const tc of casesToRun) {
       const res = await runSingleBenchmarkTest(tc, apiKey);

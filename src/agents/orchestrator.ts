@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { getOpenAIClient } from '@/server/ai/llmClient';
 import {
   CandidateProfile,
   InterviewQuestion,
@@ -69,10 +69,7 @@ export async function runMultiAgentInterviewCoaching(
     };
   }
 
-  const openai = new OpenAI({
-    apiKey: effectiveApiKey,
-    baseURL: effectiveBaseUrl,
-  });
+  const openai = getOpenAIClient(effectiveApiKey, effectiveBaseUrl);
 
   try {
     // Parallel Execution of Specialist Agents via OpenAI

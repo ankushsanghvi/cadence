@@ -5,6 +5,15 @@ import {
   INTERVIEW_ROUNDS,
 } from '@/lib/resume/resumeKnowledge';
 import { executeChatCompletion } from '@/server/ai/llmClient';
+import { allowedIntents, chooseEvidence, followUpGap, isGroundedQuestion, isQuestionableEvidence, isSemanticDuplicate, isTechnicalEvidence, isVagueReference, type QuestionIntent } from '@/lib/interview/evidenceGuard';
+import { INITIAL_INTERVIEW_DATASET } from '@/data/interviewDataset';
+
+export type InterviewEvaluation = {
+  star?: { result?: { detected?: boolean } };
+  improvements?: string[];
+};
+type LlmQuestionPayload = Partial<InterviewerQuestionOutput> & { question?: unknown };
+const questionTypes = new Set<InterviewerQuestionOutput['questionType']>(['behavioral', 'technical', 'situational', 'leadership', 'hr', 'followup', 'role_alignment']);
 
 export interface InterviewerQuestionOutput {
   question: string;
@@ -18,6 +27,9 @@ export interface InterviewerQuestionOutput {
   expectedCompetency: string;
   followUp: boolean;
   evidenceUsed: string[];
+  evidenceItemId?: string;
+  intent?: QuestionIntent;
+  generationSource?: 'llm' | 'deterministic_fallback';
   isCompleted?: boolean;
 }
 
@@ -27,7 +39,7 @@ export interface InterviewTurnRecord {
   isFollowUp: boolean;
   question: InterviewerQuestionOutput;
   answer: string;
-  evaluation?: any;
+  evaluation?: InterviewEvaluation;
 }
 
 export interface InterviewSessionState {
@@ -50,6 +62,8 @@ export interface InterviewSessionState {
   currentFollowUpsForCore: number;
   topicsCovered: string[];
   topicsRemaining: string[];
+  askedEvidenceIds: string[];
+  askedIntents: QuestionIntent[];
   isCompleted: boolean;
 }
 
@@ -85,6 +99,8 @@ export function initializeSessionState(
     currentFollowUpsForCore: 0,
     topicsCovered: [],
     topicsRemaining: allTopics,
+    askedEvidenceIds: [],
+    askedIntents: [],
     isCompleted: false,
   };
 }
@@ -101,9 +117,9 @@ export class ResumeInterviewerAgent {
   public static async decideNextQuestion(
     state: InterviewSessionState,
     lastAnswer?: string,
-    lastEvaluation?: any
+    lastEvaluation?: InterviewEvaluation
   ): Promise<{ nextQuestion: InterviewerQuestionOutput; updatedState: InterviewSessionState }> {
-    const updatedState = { ...state };
+    const updatedState = { ...state, askedEvidenceIds: state.askedEvidenceIds || [], askedIntents: state.askedIntents || [] };
 
     const elapsedMinutes = (Date.now() - new Date(updatedState.startedAt).getTime()) / 60000;
     const reachedQuestionLimit = updatedState.totalQuestionsAsked >= updatedState.maxTotalQuestions;
@@ -151,15 +167,36 @@ export class ResumeInterviewerAgent {
     // can enrich technical rounds, but it must not turn an HR introduction
     // into a project-depth interview simply because the resume is technical.
     if (updatedState.round === 'hr' || !canUseServerLLM) {
-      nextQuestion = this.generateFallbackQuestion(updatedState, shouldAskFollowUp, lastAnswer, lastEvaluation);
+      nextQuestion = this.generateFallbackQuestion(updatedState, shouldAskFollowUp, lastAnswer);
     } else {
       try {
-        nextQuestion = await this.queryLLMForNextQuestion(updatedState, shouldAskFollowUp, lastAnswer, lastEvaluation);
+        // A question transition is part of the interview's rhythm. Keep the
+        // model enhancement opportunistic and use the grounded deterministic
+        // generator if it cannot respond within the interaction budget.
+        nextQuestion = await this.queryLLMWithinBudget(updatedState, shouldAskFollowUp, lastAnswer, lastEvaluation);
       } catch (err) {
         console.warn('[ResumeInterviewerAgent] LLM call failed or unavailable, using deterministic resume-aware fallback:', err);
-        nextQuestion = this.generateFallbackQuestion(updatedState, shouldAskFollowUp, lastAnswer, lastEvaluation);
+        nextQuestion = this.generateFallbackQuestion(updatedState, shouldAskFollowUp, lastAnswer);
       }
     }
+
+    // Final gate shared by LLM, deterministic, and follow-up paths. Nothing
+    // reaches the session UI as a resume-grounded question unless its actual
+    // evidence item and wording still validate together.
+    if (nextQuestion.source === 'resume') {
+      const selectedEvidence = updatedState.evidenceGraph.find(item => item.id === nextQuestion.evidenceItemId || item.topic === nextQuestion.resumeTopic);
+      if (!isQuestionableEvidence(selectedEvidence) || !isGroundedQuestion(nextQuestion.question, selectedEvidence, updatedState.evidenceGraph, updatedState.round) || isSemanticDuplicate(nextQuestion.question, updatedState.history.map(turn => turn.question.question))) {
+        nextQuestion = this.curatedFallback(updatedState);
+      }
+    }
+
+    // Attach the actual evidence identity even for deterministic templates;
+    // topics can share names, whereas evidence ids cannot.
+    if (!nextQuestion.evidenceItemId) {
+      nextQuestion.evidenceItemId = updatedState.evidenceGraph.find(item => item.topic === nextQuestion.resumeTopic)?.id;
+    }
+    if (!nextQuestion.intent) nextQuestion.intent = nextQuestion.followUp ? followUpGap(lastAnswer || '') || 'technical_depth' : allowedIntents(updatedState.round, updatedState.evidenceGraph.find(item => item.id === nextQuestion.evidenceItemId))[0];
+    if (!nextQuestion.generationSource) nextQuestion.generationSource = 'deterministic_fallback';
 
     // Update state progression
     if (nextQuestion.followUp) {
@@ -168,13 +205,15 @@ export class ResumeInterviewerAgent {
       updatedState.coreQuestionsAsked += 1;
       updatedState.currentFollowUpsForCore = 0;
     }
+    if (nextQuestion.evidenceItemId && !updatedState.askedEvidenceIds.includes(nextQuestion.evidenceItemId)) updatedState.askedEvidenceIds.push(nextQuestion.evidenceItemId);
+    if (nextQuestion.intent) updatedState.askedIntents.push(nextQuestion.intent);
     updatedState.totalQuestionsAsked += 1;
 
     // Mark resume topic as covered
     if (nextQuestion.resumeTopic && !updatedState.topicsCovered.includes(nextQuestion.resumeTopic)) {
       updatedState.topicsCovered.push(nextQuestion.resumeTopic);
       updatedState.topicsRemaining = updatedState.topicsRemaining.filter(t => t !== nextQuestion.resumeTopic);
-      const graphItem = updatedState.evidenceGraph.find(e => e.topic === nextQuestion.resumeTopic);
+      const graphItem = updatedState.evidenceGraph.find(e => e.id === nextQuestion.evidenceItemId || e.topic === nextQuestion.resumeTopic);
       if (graphItem) {
         graphItem.covered = true;
         graphItem.timesExplored = (graphItem.timesExplored || 0) + 1;
@@ -184,13 +223,31 @@ export class ResumeInterviewerAgent {
     return { nextQuestion, updatedState };
   }
 
+  private static async queryLLMWithinBudget(
+    state: InterviewSessionState,
+    isFollowUp: boolean,
+    lastAnswer?: string,
+    lastEvaluation?: InterviewEvaluation
+  ): Promise<InterviewerQuestionOutput> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.queryLLMForNextQuestion(state, isFollowUp, lastAnswer, lastEvaluation),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error('Question generation exceeded the live interview budget.')), 1800);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
   /**
    * Detects if the candidate's last answer has a noticeable gap that warrants a targeted follow-up.
    */
-  private static detectFollowUpNeed(answer: string, evaluation?: any): boolean {
-    const words = answer.trim().split(/\s+/).length;
+  private static detectFollowUpNeed(answer: string, evaluation?: InterviewEvaluation): boolean {
     // 1. Very brief answer
-    if (words < 40) return true;
+    if (followUpGap(answer)) return true;
 
     // 2. Unquantified claim in behavioral/technical response
     const hasNumbers = /\b\d+(\.\d+)?%?\b/g.test(answer);
@@ -213,6 +270,23 @@ export class ResumeInterviewerAgent {
     return false;
   }
 
+  private static resolveFollowUpContext(state: InterviewSessionState): string | null {
+    const previousQuestion = state.history.at(-1)?.question;
+    const topic = previousQuestion?.resumeTopic;
+    const evidence = previousQuestion?.evidenceItemId || topic
+      ? state.evidenceGraph.find((item) => item.id === previousQuestion?.evidenceItemId || item.topic === topic)
+      : undefined;
+    const verifiedTopic = evidence?.topic || topic;
+
+    return verifiedTopic && verifiedTopic !== 'Resume' && verifiedTopic !== 'Resume Experience'
+      ? `While discussing ${verifiedTopic}`
+      : null;
+  }
+
+  private static hasVagueFollowUpReference(question: string): boolean {
+    return isVagueReference(question);
+  }
+
   /**
    * Prompts the configured LLM endpoint (openai/gpt-5-nano) with strict resume grounding.
    */
@@ -220,10 +294,14 @@ export class ResumeInterviewerAgent {
     state: InterviewSessionState,
     isFollowUp: boolean,
     lastAnswer?: string,
-    lastEvaluation?: any
+    lastEvaluation?: InterviewEvaluation
   ): Promise<InterviewerQuestionOutput> {
     const roundDef = INTERVIEW_ROUNDS[state.round] || INTERVIEW_ROUNDS.behavioral;
-    const targetEvidence = state.evidenceGraph.find(e => !e.covered) || state.evidenceGraph[0];
+    const targetEvidence = isFollowUp
+      ? state.evidenceGraph.find(e => e.id === state.history.at(-1)?.question.evidenceItemId || e.topic === state.history.at(-1)?.question.resumeTopic)
+      : chooseEvidence(state.evidenceGraph, state.round, state.askedEvidenceIds || []);
+    if (!targetEvidence) throw new Error('No concrete resume evidence is available for a grounded question.');
+    const permittedIntents = allowedIntents(state.round, targetEvidence).filter(i => !(state.askedIntents || []).includes(i));
 
     const promptContext = {
       candidateName: state.candidateName,
@@ -234,28 +312,29 @@ export class ResumeInterviewerAgent {
       coreQuestionNumber: isFollowUp ? state.coreQuestionsAsked : state.coreQuestionsAsked + 1,
       totalCoreQuestions: state.totalCoreQuestions,
       isFollowUp,
-      selectedResumeTopic: targetEvidence?.topic || 'Core Experience',
-      resumeFacts: targetEvidence?.facts || [],
-      candidateTechnologies: state.resumeKnowledge.skills.technologies.slice(0, 8),
-      candidateProjects: state.resumeKnowledge.projects.map(p => ({ name: p.name, desc: p.description })),
-      candidateExperience: state.resumeKnowledge.experience.map(e => ({ company: e.company, role: e.role, summary: e.summary })),
-      candidateOrganizations: state.resumeKnowledge.organizations,
+      selectedResumeTopic: targetEvidence.topic,
+      resumeFacts: targetEvidence.facts,
+      evidenceType: targetEvidence.category,
+      evidenceTechnologies: targetEvidence.technologies,
+      evidenceResponsibilities: targetEvidence.responsibilities,
+      permittedIntents,
       topicsAlreadyCovered: state.topicsCovered,
       lastQuestion: state.history[state.history.length - 1]?.question.question,
       lastAnswer: lastAnswer || null,
       identifiedWeakness: lastEvaluation?.improvements?.[0] || null,
+      verifiedFollowUpContext: isFollowUp ? this.resolveFollowUpContext(state) : null,
     };
 
     const systemPrompt = `You are an elite, perceptive, and highly experienced AI Interviewer conducting a rigorous job interview.
 You have thoroughly reviewed the candidate's actual resume.
 CRITICAL MANDATES:
-1. Ground your questions in the ACTUAL FACTS from the candidate's resume (companies, ventures, roles, projects, technologies, metrics).
+1. Ground your question only in the selected evidence item. Its technologies, facts and responsibilities are the only facts you may attribute to it. Global skills are not evidence that a technology was used at a company, university, or project.
 2. NEVER hallucinate or invent experiences, companies, metrics, or teams that are not in the resume.
 3. If this is a FOLLOW-UP question, probe the specific gap or claim in the candidate's previous answer (e.g. asking for specific metrics, personal contribution vs team, or architectural rationale).
-4. If this is a NEW core question, choose an uncovered resume topic and frame the question appropriate for the current interview round:
+4. If this is a NEW core question, use the supplied selected evidence item and frame it appropriate for the current interview round:
    - HR / Intro: Background, career trajectory, motivation, and culture/role fit. Do NOT ask for architecture, project selection, implementation detail, technical trade-offs, or metrics.
    - Behavioral: STAR situations of adversity, disagreement, or failure in their past ventures/jobs.
-   - Technical: In-depth questions about specific technologies, algorithms, databases, or architectures listed on their resume.
+   - Technical: In-depth implementation questions only for project/work/venture evidence with supported technical facts. For education, certification, or a generic skill, ask a focused foundations or role-knowledge question; never imply it had an architecture or implementation.
    - Situational: Hypothetical operational challenges calibrated to their real experience (e.g., startup orders crashing, partner outage).
    - Leadership: Ownership, unassigned initiatives, founding decisions, stakeholder management.
 5. Return ONLY a single, valid JSON object matching the requested schema.`;
@@ -270,7 +349,7 @@ ${JSON.stringify(promptContext, null, 2)}
 
 Role guidance: ${roleGuidance}
 
-Question constraints: ask one conversational question in 20–45 words (two short sentences at most). Never combine more than two asks. A follow-up must probe one specific gap only.
+Question constraints: ask one conversational question in 20–45 words (two short sentences at most). Never combine more than two asks. A follow-up must probe one specific gap only. Every follow-up must stand alone: include the provided verified follow-up context in the question, and never use “that initiative,” “that project,” “what the team delivered,” “as you mentioned,” “that experience,” “that effort,” or “that implementation.” If no verified follow-up context is provided, ask a fresh standalone question instead of a follow-up.
 
 For HR / Introduction, ask a warm, people-focused interviewer question about the candidate's story, motivation, or fit—not a technical or project-depth question.
 
@@ -282,11 +361,11 @@ Return ONLY valid JSON matching this exact structure:
   "competency": "${roundDef.primaryCompetencies[0]}",
   "difficulty": "${state.difficulty}",
   "source": "resume",
-  "resumeTopic": "${targetEvidence?.topic || 'Resume'}",
+      "resumeTopic": "${targetEvidence.topic}",
   "reason": "Why this question was chosen based on the resume and previous responses",
   "expectedCompetency": "Key competency being tested",
   "followUp": ${isFollowUp},
-  "evidenceUsed": ${JSON.stringify(targetEvidence?.facts?.slice(0, 2) || [targetEvidence?.topic || 'Resume'])}
+      "evidenceUsed": ${JSON.stringify(targetEvidence.facts.slice(0, 2))}
 }`;
 
     const res = await executeChatCompletion({
@@ -296,25 +375,38 @@ Return ONLY valid JSON matching this exact structure:
       ],
       responseFormat: 'json_object',
       temperature: isFollowUp ? 0.3 : 0.6,
+      traceName: isFollowUp ? 'Question Agent — Adaptive Follow-up' : 'Question Agent — Resume Question',
     });
 
-    const parsed = JSON.parse((res as any).choices?.[0]?.message?.content || '{}');
+    const rawContent = res.choices?.[0]?.message?.content;
+    const parsed: LlmQuestionPayload = typeof rawContent === 'string' ? JSON.parse(rawContent) as LlmQuestionPayload : {};
     if (!parsed.question || typeof parsed.question !== 'string') {
       throw new Error('Malformed JSON received from LLM');
+    }
+    if (isFollowUp && (!this.resolveFollowUpContext(state) || this.hasVagueFollowUpReference(parsed.question))) {
+      throw new Error('LLM returned a vague or ungrounded follow-up');
+    }
+    if (!isQuestionableEvidence(targetEvidence) || !isGroundedQuestion(parsed.question, targetEvidence, state.evidenceGraph, state.round) || isSemanticDuplicate(parsed.question, state.history.map(turn => turn.question.question))) {
+      throw new Error('LLM returned an ungrounded or duplicate question');
     }
 
     return {
       question: this.limitQuestionLength(parsed.question),
-      questionType: parsed.questionType || (state.round as any) || 'behavioral',
+      questionType: questionTypes.has(parsed.questionType as InterviewerQuestionOutput['questionType'])
+        ? parsed.questionType as InterviewerQuestionOutput['questionType']
+        : state.round === 'technical' ? 'technical' : state.round === 'situational' ? 'situational' : state.round === 'leadership' ? 'leadership' : state.round === 'hr' ? 'hr' : 'behavioral',
       round: state.round,
       competency: parsed.competency || roundDef.primaryCompetencies[0],
       difficulty: state.difficulty,
       source: 'resume',
-      resumeTopic: parsed.resumeTopic || targetEvidence?.topic || 'Resume Experience',
+      resumeTopic: targetEvidence.topic,
       reason: parsed.reason || 'Personalized using candidate resume evidence graph.',
       expectedCompetency: parsed.expectedCompetency || 'Demonstrated ownership and technical depth',
       followUp: isFollowUp,
-      evidenceUsed: parsed.evidenceUsed || [targetEvidence?.topic || 'Resume'],
+      evidenceUsed: targetEvidence.facts.slice(0, 2),
+      evidenceItemId: targetEvidence.id,
+      intent: permittedIntents[0] || allowedIntents(state.round, targetEvidence)[0],
+      generationSource: 'llm',
     };
   }
 
@@ -333,6 +425,19 @@ Return ONLY valid JSON matching this exact structure:
     return names[role.toLowerCase()] || role;
   }
 
+  private static curatedFallback(state: InterviewSessionState): InterviewerQuestionOutput {
+    const stageByRound: Record<InterviewRoundKey, string> = {
+      hr: 'HR & Culture Screening', behavioral: 'Behavioral & STAR Competency', technical: 'Technical & Domain Depth',
+      situational: 'System Design & Scenarios', leadership: 'Executive & Client Communication', mock: 'Behavioral & STAR Competency',
+    };
+    const datasetQuestion = INITIAL_INTERVIEW_DATASET.find(item => item.stage === stageByRound[state.round]) || INITIAL_INTERVIEW_DATASET[0];
+    return {
+      question: datasetQuestion.question, questionType: state.round === 'hr' ? 'hr' : state.round === 'technical' ? 'technical' : state.round === 'situational' ? 'situational' : state.round === 'leadership' ? 'leadership' : 'behavioral',
+      round: state.round, competency: datasetQuestion.competency, difficulty: state.difficulty, source: 'role_standard', resumeTopic: 'Role-standard question',
+      reason: 'No sufficiently detailed resume evidence was available; selected a curated round-appropriate question.', expectedCompetency: datasetQuestion.expectedCompetencies.join(', '), followUp: false, evidenceUsed: [], intent: 'role_knowledge',
+    };
+  }
+
   /**
    * Deterministic, zero-failure fallback engine that is GUARANTEED to be resume-aware.
    * Dynamically constructs questions using candidate's actual projects, companies, metrics, and skills.
@@ -340,39 +445,45 @@ Return ONLY valid JSON matching this exact structure:
   public static generateFallbackQuestion(
     state: InterviewSessionState,
     isFollowUp: boolean,
-    lastAnswer?: string,
-    lastEvaluation?: any
+    lastAnswer?: string
   ): InterviewerQuestionOutput {
     const roundDef = INTERVIEW_ROUNDS[state.round] || INTERVIEW_ROUNDS.behavioral;
 
     // Pick an uncovered evidence item if possible
-    const availableEvidence = state.evidenceGraph.filter(e => !e.covered);
-    const evidence = availableEvidence.length > 0 ? availableEvidence[0] : state.evidenceGraph[0];
+    const previousEvidence = state.history.at(-1)?.question.evidenceItemId;
+    const evidence = isFollowUp
+      ? state.evidenceGraph.find(item => item.id === previousEvidence || item.topic === state.history.at(-1)?.question.resumeTopic)
+      : chooseEvidence(state.evidenceGraph, state.round, state.askedEvidenceIds || []);
+
+    if (!evidence || (isFollowUp && !isQuestionableEvidence(evidence))) return isFollowUp ? this.generateFallbackQuestion(state, false) : this.curatedFallback(state);
 
     const topic = evidence?.topic || 'Core Experience';
     const role = evidence?.role || 'Engineer';
-    const organization = evidence?.organization || topic;
     const metric = evidence?.metrics?.[0];
-    const tech = evidence?.technologies?.[0] || state.resumeKnowledge.skills.technologies[0] || 'your core stack';
-    const project = state.resumeKnowledge.projects[0]?.name || topic;
+    const tech = evidence?.technologies?.[0];
     const isDataAnalyst = /\b(data analyst|analyst|\bda\b)\b/i.test(state.targetRole);
     const isExecutive = /\b(executive|leadership|manager|\bem\b)\b/i.test(state.targetRole);
     const targetRole = this.displayRole(state.targetRole);
 
     // 1. Follow-Up Generation
     if (isFollowUp && lastAnswer) {
+      const followUpContext = this.resolveFollowUpContext(state);
+      if (!followUpContext) {
+        return this.generateFallbackQuestion(state, false);
+      }
       if (state.round === 'hr') {
         return {
-          question: `What specifically motivated you to move toward a ${targetRole} role at this point in your career?`,
+          question: `${followUpContext}, what specifically motivated you to move toward a ${targetRole} role at this point in your career?`,
           questionType: 'followup', round: state.round, competency: 'Career Motivation', difficulty: state.difficulty,
           source: 'resume', resumeTopic: topic,
           reason: 'Clarifying the candidate’s career motivation in an HR interview.',
           expectedCompetency: 'Clear career direction and role fit', followUp: true, evidenceUsed: [topic],
         };
       }
-      if (/\b(we|our team)\b/i.test(lastAnswer) && !/\b(i specifically|i personally)\b/i.test(lastAnswer)) {
+      const gap = followUpGap(lastAnswer);
+      if (gap === 'ownership') {
         return {
-          question: `You mentioned what the team delivered. What specifically was your personal contribution and ownership in that initiative?`,
+          question: `${followUpContext}, you described a team outcome. What specifically did you personally design, implement, or own?`,
           questionType: 'followup',
           round: state.round,
           competency: 'Personal Ownership',
@@ -386,9 +497,9 @@ Return ONLY valid JSON matching this exact structure:
         };
       }
 
-      if (!/\b\d+%?\b/.test(lastAnswer)) {
+      if (gap === 'measurable_impact') {
         return {
-          question: `You mentioned seeing positive improvement in that effort. What was the concrete, measurable outcome or metric that verified success?`,
+          question: `${followUpContext}, what concrete metric or measurable outcome verified success?`,
           questionType: 'followup',
           round: state.round,
           competency: 'STAR Result Rigor',
@@ -402,19 +513,21 @@ Return ONLY valid JSON matching this exact structure:
         };
       }
 
-      return {
-        question: `What was the single most difficult trade-off or unexpected obstacle you encountered during that implementation?`,
+      const answerTechnology = [...(evidence?.technologies || [])].reverse().find(item => new RegExp(`\\b${item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lastAnswer));
+      if (gap === 'design_decision' && answerTechnology) return {
+        question: `${followUpContext}, you said you used ${answerTechnology}. What requirement or trade-off led you to choose it?`,
         questionType: 'followup',
         round: state.round,
         competency: 'Adversity & Trade-offs',
         difficulty: state.difficulty,
         source: 'resume',
         resumeTopic: topic,
-        reason: 'Deep-diving into trade-offs and decision rigor.',
+        reason: 'Probing the design rationale omitted from the latest answer.',
         expectedCompetency: 'Critical Decision-Making',
         followUp: true,
         evidenceUsed: [topic],
       };
+      return this.generateFallbackQuestion(state, false);
     }
 
     // 2. Core Question Generation by Round
@@ -427,7 +540,7 @@ Return ONLY valid JSON matching this exact structure:
           questionText = `Please introduce yourself and walk me through the experiences that led you to pursue a ${targetRole} role.`;
           comp = 'Career Story & Motivation';
         } else if (state.coreQuestionsAsked === 1) {
-          questionText = `What interests you most about building a career in AI/ML, and how has your experience at ${topic} shaped that direction?`;
+          questionText = `What interests you most about a ${targetRole} career, and which part of your background has most shaped that direction?`;
           comp = 'Role Motivation & Fit';
         } else {
           questionText = `What are you looking for in your next team, and how would you hope to contribute in your first few months?`;
@@ -440,24 +553,41 @@ Return ONLY valid JSON matching this exact structure:
           questionText = `I noticed you were involved in ${topic} as ${role}${metric ? ` handling ${metric}` : ''}. Tell me about a critical decision you had to make under extreme uncertainty where there was no clear right answer.`;
           comp = 'Decision Making Under Uncertainty';
         } else if (state.coreQuestionsAsked % 2 === 0) {
-          questionText = `Describe a situation while working on ${topic} where a deliverable faced an unexpected production bottleneck or technical disagreement. How did you resolve it?`;
+          questionText = `Describe a meaningful challenge while working on ${topic}. What action did you take, and what did you learn?`;
           comp = 'Conflict Resolution & Adversity';
         } else {
-          questionText = `Tell me about a time on ${project} where something failed or did not meet expectations. How did you diagnose the issue and communicate the resolution?`;
+          questionText = `Tell me about a time related to ${topic} when something did not meet expectations. How did you respond and communicate the outcome?`;
           comp = 'Overcoming Failure (STAR)';
         }
         break;
 
       case 'technical':
-        if (isDataAnalyst) {
+        if (evidence?.category === 'education') {
+          questionText = `Your education includes ${topic}. Which relevant concept or coursework gave you a useful technical foundation, and how do you apply it today?`;
+          comp = 'Academic Foundation';
+        } else if (evidence?.category === 'certification' || evidence?.category === 'achievement') {
+          questionText = `Your resume lists ${topic}. What practical knowledge did you gain from it, and where would you apply that knowledge?`;
+          comp = 'Role Knowledge';
+        } else if (isDataAnalyst && isTechnicalEvidence(evidence)) {
           questionText = `Using ${topic}, walk me through one analysis you delivered. How did you validate the data and turn it into a recommendation?`;
           comp = 'Data Interpretation & Business Reasoning';
-        } else if (evidence?.technologies?.length || state.resumeKnowledge.skills.technologies.length) {
-          questionText = `Your resume highlights experience with ${tech} on ${topic}. Can you explain how you designed the underlying architecture and why you chose that approach over alternative solutions?`;
-          comp = 'Architecture & Tooling Mastery';
+        } else if (isTechnicalEvidence(evidence) && tech) {
+          const intent = allowedIntents(state.round, evidence).find(i => !(state.askedIntents || []).includes(i)) || 'technical_depth';
+          const templates: Record<string, string> = {
+            implementation: `On ${topic}, how did you implement the part of the work involving ${tech}?`,
+            debugging: `On ${topic}, describe a technical issue you diagnosed and the evidence you used to isolate it.`,
+            design_decision: `On ${topic}, what requirement led you to use ${tech}, and what alternative did you consider?`,
+            trade_off: `On ${topic}, what trade-off did you make while working with ${tech}?`,
+            scalability: `On ${topic}, what constraint would you examine first if usage increased substantially?`,
+            performance: `On ${topic}, how did you evaluate whether the implementation performed well enough?`,
+            failure_handling: `On ${topic}, how did you plan for or handle failures in the part you built?`,
+            technical_depth: `Walk me through the most technically demanding part of ${topic} that involved ${tech}.`,
+          };
+          questionText = templates[intent];
+          comp = intent.replace('_', ' ');
         } else {
-          questionText = `Walk me through the end-to-end technical implementation of ${project}. What were the key bottlenecks you had to design around?`;
-          comp = 'Technical Depth & Implementation';
+          questionText = `Your resume lists ${topic}. What practical role-specific knowledge are you most confident applying, and how would you use it?`;
+          comp = 'Role Knowledge';
         }
         break;
 
@@ -466,7 +596,7 @@ Return ONLY valid JSON matching this exact structure:
           questionText = `Imagine you are running ${topic} and orders or system traffic suddenly drop by 30% over a 48-hour period. Walk me through your step-by-step investigation framework.`;
           comp = 'Incident Root Cause Analysis';
         } else {
-          questionText = `Imagine a critical third-party dependency in ${project} experiences a major breaking API outage right before a launch deadline. How do you mitigate the risk for users?`;
+          questionText = `Imagine a dependency relevant to ${topic} becomes unavailable before a deadline. How would you assess the impact and respond?`;
           comp = 'Crisis Management';
         }
         break;
@@ -488,7 +618,7 @@ Return ONLY valid JSON matching this exact structure:
           questionText = `Tell me about a challenging situation you navigated while delivering ${topic}. Walk me through the Situation, Task, Action, and quantifiable Result.`;
           comp = 'Behavioral (STAR)';
         } else if (mockStageIdx < 10) {
-          questionText = `On ${project}, you utilized ${tech}. What were the primary scalability and latency considerations you architected for?`;
+          questionText = isTechnicalEvidence(evidence) && tech ? `On ${topic}, what technical constraint did you consider when working with ${tech}?` : `What role-specific knowledge from ${topic} would you apply to a new problem?`;
           comp = 'Technical Architecture';
         } else if (mockStageIdx < 12) {
           questionText = `If your primary production pipeline for ${topic} experienced silent data corruption under heavy concurrent load, how would you triage and fix it?`;
@@ -514,7 +644,9 @@ Return ONLY valid JSON matching this exact structure:
       reason: `Deterministic resume-aware question generated from candidate evidence item: ${topic} (${role}).`,
       expectedCompetency: comp,
       followUp: false,
-      evidenceUsed: [topic, role, ...(metric ? [metric] : [])],
+      evidenceUsed: [topic, ...(metric ? [metric] : [])],
+      evidenceItemId: evidence?.id,
+      intent: allowedIntents(state.round, evidence).find(i => !(state.askedIntents || []).includes(i)) || allowedIntents(state.round, evidence)[0],
     };
   }
 }

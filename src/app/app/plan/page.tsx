@@ -4,17 +4,10 @@ import { Link } from "@/lib/routerCompat";
 import { ArrowRight, CalendarClock, Dumbbell, TrendingUp } from "lucide-react";
 import { loadSessions, profile } from "@/lib/store";
 import { recommendedTopics } from "@/lib/resources";
+import { IMPROVEMENT_DRILLS } from "@/lib/improvementPlan";
 import ResourceList from "@/components/ResourceList";
 import { Reveal } from "@/components/ui-bits";
 import { useEffect, useState } from "react";
-
-const DRILLS: Record<string, any> = {
-  fillers: { title: "Kill the filler words", drill: "Record a 60-second answer. Replay. Count every 'um'. Do it three times — the count drops on its own.", metric: "0–2 fillers per answer" },
-  results: { title: "Land every result with a number", drill: "Before submitting, force yourself to end with one sentence containing a %, a time saved, or a revenue figure.", metric: "100% of answers end quantified" },
-  structure: { title: "Signpost out loud", drill: "Open with 'Two things happened…', use 'First / Then / Which meant' — make the structure audible to a tired interviewer.", metric: "3+ connectors per answer" },
-  hedges: { title: "Delete the hedging", drill: "Replace every 'I think / maybe / I guess' with the plain claim. If you can't say it plainly, don't claim it.", metric: "≤1 hedge per answer" },
-  thin: { title: "Add a second beat", drill: "Structure answers as: claim → example → result. Most thin answers only have the claim.", metric: "90+ words per answer" },
-};
 
 const GENERIC = [
   { title: "Practice 4 sessions this week", drill: "Mix one behavioral, one technical-communication, one situational and one follow-up drill.", metric: "4 sessions / week" },
@@ -31,7 +24,7 @@ export default function Plan() {
 
   const milestones = [
     ...(p.gaps || []).slice(0, 2).map((g: any) => ({
-      ...DRILLS[g.key],
+      ...IMPROVEMENT_DRILLS[g.key as keyof typeof IMPROVEMENT_DRILLS],
       progress: Math.max(10, 100 - g.pct),
       weeks: "This week",
     })),

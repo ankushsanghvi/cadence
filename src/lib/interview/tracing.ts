@@ -25,10 +25,8 @@ export async function traceInterviewRun<T>(
     processOutputs: () => ({ redacted: true }),
   });
 
-  try {
-    return await traced();
-  } catch {
-    // Observability must never interrupt an interview.
-    return run();
-  }
+  // Do not re-run work here: retrying after a traced model failure can create
+  // duplicate provider calls and obscure the real fallback reason. The caller
+  // owns its normal deterministic fallback.
+  return traced();
 }

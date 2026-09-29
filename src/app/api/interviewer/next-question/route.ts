@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { InterviewSessionState } from '@/agents/resumeInterviewerAgent';
+import { InterviewSessionState, type InterviewEvaluation } from '@/agents/resumeInterviewerAgent';
 import { runInterviewGraph } from '@/lib/interview/graph';
 
 export async function POST(req: NextRequest) {
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const { sessionState, lastAnswer, lastEvaluation } = body as {
       sessionState: InterviewSessionState;
       lastAnswer?: string;
-      lastEvaluation?: any;
+      lastEvaluation?: InterviewEvaluation;
     };
 
     if (!sessionState || !sessionState.resumeKnowledge) {
@@ -30,10 +30,10 @@ export async function POST(req: NextRequest) {
       nextQuestion: graphResult.nextQuestion,
       sessionState: graphResult.sessionState,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('API /api/interviewer/next-question error:', err);
     return NextResponse.json(
-      { error: 'Interviewer agent error', message: err?.message || String(err) },
+      { error: 'Interviewer agent error', message: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }

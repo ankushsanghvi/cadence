@@ -4,7 +4,7 @@ import { normalizeResumeProfile } from '@/lib/resumeParser';
 export interface ResumeEvidenceItem {
   id: string;
   topic: string;
-  category: 'experience' | 'project' | 'venture' | 'skill' | 'education' | 'achievement';
+  category: 'experience' | 'project' | 'venture' | 'skill' | 'education' | 'achievement' | 'certification';
   role?: string;
   organization?: string;
   facts: string[];
@@ -199,10 +199,10 @@ export function buildEvidenceGraph(profile: CandidateProfile): ResumeEvidenceIte
       role: exp.role,
       organization: exp.company,
       facts,
-      skills: techSkills.slice(0, 3),
-      technologies: technologies.filter(t => (exp.summary || '').toLowerCase().includes(t.toLowerCase())),
+      skills: exp.technologies?.length ? exp.technologies : technologies.filter(t => (exp.summary || '').toLowerCase().includes(t.toLowerCase())),
+      technologies: exp.technologies?.length ? exp.technologies : technologies.filter(t => (exp.summary || '').toLowerCase().includes(t.toLowerCase())),
       metrics,
-      responsibilities: [exp.role, `Ownership at ${exp.company}`],
+      responsibilities: exp.responsibilities || [],
       achievements: metrics.length > 0 ? [`Achieved ${metrics.join(', ')} at ${exp.company}`] : [],
       potentialCompetencies: isVenture 
         ? ['Leadership', 'Ownership', 'Product', 'Growth', 'Problem Solving', 'Decision Making']
@@ -231,10 +231,10 @@ export function buildEvidenceGraph(profile: CandidateProfile): ResumeEvidenceIte
       role: intern.role || 'Intern',
       organization: intern.company,
       facts,
-      skills: techSkills.slice(0, 3),
-      technologies: technologies.filter(t => (intern.summary || '').toLowerCase().includes(t.toLowerCase())),
+      skills: intern.technologies?.length ? intern.technologies : technologies.filter(t => (intern.summary || '').toLowerCase().includes(t.toLowerCase())),
+      technologies: intern.technologies?.length ? intern.technologies : technologies.filter(t => (intern.summary || '').toLowerCase().includes(t.toLowerCase())),
       metrics,
-      responsibilities: [intern.role || 'Intern', `Internship at ${intern.company}`],
+      responsibilities: intern.responsibilities || [],
       achievements: metrics.length > 0 ? [`Achieved ${metrics.join(', ')} at ${intern.company}`] : [],
       potentialCompetencies: ['Technical Depth', 'Fast Learning', 'Execution', 'Collaboration'],
       source: 'resume',
@@ -266,10 +266,10 @@ export function buildEvidenceGraph(profile: CandidateProfile): ResumeEvidenceIte
       role: 'Project Lead / Author',
       organization: 'Independent / University / Enterprise',
       facts,
-      skills: techSkills.slice(0, 3),
-      technologies: technologies.filter(t => (proj.summary || '').toLowerCase().includes(t.toLowerCase())),
+      skills: proj.technologies?.length ? proj.technologies : technologies.filter(t => (proj.summary || '').toLowerCase().includes(t.toLowerCase())),
+      technologies: proj.technologies?.length ? proj.technologies : technologies.filter(t => (proj.summary || '').toLowerCase().includes(t.toLowerCase())),
       metrics,
-      responsibilities: [`Architected and implemented ${proj.name}`],
+      responsibilities: proj.contribution ? [proj.contribution] : [],
       achievements: metrics.length > 0 ? [`Delivered metrics: ${metrics.join(', ')}`] : [],
       potentialCompetencies: ['Technical Depth', 'System Design', 'Architecture Trade-offs', 'Problem Solving'],
       source: 'resume',
@@ -292,10 +292,10 @@ export function buildEvidenceGraph(profile: CandidateProfile): ResumeEvidenceIte
       role: 'Graduate / Student',
       organization: edu.institution,
       facts,
-      skills: techSkills.slice(0, 2),
+      skills: [],
       technologies: [],
       metrics: edu.grade ? [edu.grade] : [],
-      responsibilities: [`Academic excellence at ${edu.institution}`],
+      responsibilities: [],
       achievements: edu.grade ? [`Attained ${edu.grade}`] : [],
       potentialCompetencies: ['Foundational Knowledge', 'Computer Science Fundamentals', 'Academic Rigor'],
       source: 'resume',
@@ -341,6 +341,10 @@ export function buildEvidenceGraph(profile: CandidateProfile): ResumeEvidenceIte
       timesExplored: 0,
     });
   }
+
+  (profile.certifications || []).forEach((certification, idx) => {
+    items.push({ id: `cert_${idx}`, topic: certification, category: 'certification', facts: [certification], skills: [], technologies: [], metrics: [], responsibilities: [], achievements: [], potentialCompetencies: ['Role Knowledge', 'Learning'], source: 'resume', covered: false, timesExplored: 0 });
+  });
 
   return items;
 }

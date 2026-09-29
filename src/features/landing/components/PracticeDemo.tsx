@@ -105,7 +105,7 @@ export default function PracticeDemo() {
                   </div>
                   <div className="mt-6 grid gap-x-10 gap-y-4 sm:grid-cols-2">
                     {Object.entries(result.scores).map(([k, v], i) => (
-                      <ScoreBar key={k} label={k[0].toUpperCase() + k.slice(1)} value={v} delay={i * 0.08} />
+                      <ScoreBar key={k} label={k[0].toUpperCase() + k.slice(1)} value={typeof v === 'number' ? v : 0} delay={i * 0.08} />
                     ))}
                   </div>
                   <div className="mt-6 space-y-2">

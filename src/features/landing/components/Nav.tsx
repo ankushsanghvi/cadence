@@ -8,7 +8,6 @@ const LINKS = [
   { label: "Features", href: "#features" },
   { label: "5-Agent Engine", href: "#agents" },
   { label: "Try it live", href: "#practice-demo" },
-  { label: "Method", href: "#method" },
 ];
 
 export default function Nav() {

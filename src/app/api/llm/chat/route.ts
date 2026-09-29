@@ -57,10 +57,10 @@ export async function POST(req: NextRequest) {
       model: completion.model,
       usage: completion.usage,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('LLM Chat Completion Route Error:', error);
     return NextResponse.json(
-      { error: 'Failed to process chat completion', message: error?.message || String(error) },
+      { error: 'Failed to process chat completion', message: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

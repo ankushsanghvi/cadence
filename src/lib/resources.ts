@@ -124,8 +124,13 @@ export function recommendedTopics({ scores = {}, role, gaps = [] }: any = {}) {
 }
 
 /** A bounded, structured recommendation payload built only from the curated catalog. */
-export function getRecommendedResources({ scores = {}, role, weaknesses = [], turns = [] }: any = {}) {
-  const topics = recommendedTopics({ scores, role });
+export function getRecommendedResources({ scores = {}, role, weaknesses = [], weaknessKeys = [], turns = [] }: any = {}) {
+  // A session review must not manufacture a study list for a strong answer.
+  // Callers pass evidence-backed gap keys; the library below is the sole URL
+  // source, so each link stays curated and reviewable.
+  if (!Array.isArray(weaknessKeys) || weaknessKeys.length === 0) return [];
+  const gapTopics = weaknessKeys.map((key) => GAP_TOPIC[key]).filter(Boolean);
+  const topics = [...new Set(gapTopics)];
   const askedText = turns.map((turn) => `${turn.question?.text || ''} ${turn.question?.competency || ''}`).join(' ').toLowerCase();
   if (/\bsql|query|join|database\b/.test(askedText)) topics.unshift('sql');
   if (/\bpandas|python|excel|dashboard|data quality\b/.test(askedText)) topics.unshift('pandas');

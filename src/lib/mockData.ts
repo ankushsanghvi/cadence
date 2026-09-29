@@ -27,8 +27,8 @@ export const EVAL_CRITERIA = [
   { key: "relevance", label: "Relevance", weight: 20 },
   { key: "clarity", label: "Clarity", weight: 20 },
   { key: "structure", label: "Response Structure", weight: 25 },
-  { key: "completeness", label: "Completeness", weight: 20 },
-  { key: "communication", label: "Communication Quality", weight: 15 },
+  { key: "completeness", label: "Completeness", weight: 15 },
+  { key: "communication", label: "Communication Quality", weight: 20 },
 ];
 
 export const AGENTS = [
@@ -459,16 +459,6 @@ export const MARQUEE_ITEMS = [
   "Customer Success Lead",
   "Business Analyst",
   "DevOps Engineer",
-];
-
-export const FLOW_STEPS = [
-  { label: "Candidate", note: "Profile, target role, skills" },
-  { label: "Question", note: "Adaptive selection" },
-  { label: "Response", note: "Text or voice" },
-  { label: "Analysis", note: "Speech + content signals" },
-  { label: "Specialist Agents", note: "4 parallel evaluators" },
-  { label: "Coaching Feedback", note: "Coach synthesis" },
-  { label: "Improvement Plan", note: "Cross-session" },
 ];
 
 export const questionById = (id) => QUESTION_BANK.find((q) => q.id === id);

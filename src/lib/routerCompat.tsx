@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import NextLink from 'next/link';
 import { useRouter, usePathname, useSearchParams as useNextSearchParams } from 'next/navigation';
 
-export function Link({ to, href, children, ...props }: any) {
+type LinkProps = Omit<ComponentProps<typeof NextLink>, 'href' | 'className'> & { to?: string; href?: string; children?: ReactNode; className?: string };
+export function Link({ to, href, children, ...props }: LinkProps) {
   const target = to || href || '#';
   return (
     <NextLink href={target} {...props}>
@@ -13,7 +14,8 @@ export function Link({ to, href, children, ...props }: any) {
   );
 }
 
-export function NavLink({ to, href, className, children, end, ...props }: any) {
+type NavLinkProps = Omit<LinkProps, 'className'> & { end?: boolean; className?: string | ((state: { isActive: boolean }) => string) };
+export function NavLink({ to, href, className, children, end, ...props }: NavLinkProps) {
   const pathname = usePathname();
   const target = to || href || '';
   const isActive = end ? pathname === target : pathname.startsWith(target);

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Mic, Square, PenLine, Check, AlertCircle,
   RotateCcw, Copy, Clock, Award, CheckCircle2, ChevronRight, Download,
-  Printer, Sparkles, Building2, User, Target, BrainCircuit, ExternalLink, ShieldCheck,
+  Printer, Sparkles, Building2, User, Target, BrainCircuit, ExternalLink,
   FileText
 } from "lucide-react";
 import { COMPETENCIES, AGENTS, pickQuestion } from "@/lib/mockData";
@@ -31,6 +31,7 @@ import {
 } from "@/lib/resume/resumeKnowledge";
 import { DEFAULT_PROFILE, PROFILE_KEY } from "@/lib/api";
 import { normalizeResumeProfile, isCorruptOrGarbageProfile } from "@/lib/resumeParser";
+import { sessionCategoryForRound } from "@/lib/sessionFilters";
 
 const compLabel = (id: string) => COMPETENCIES.find((c) => c.id === id)?.label || id;
 const DRAFT_KEY = "cadence_draft";
@@ -61,14 +62,9 @@ function PracticeSessionInner() {
   );
 
   // Initialize Question
-  const [question, setQuestion] = useState<any>({
-    id: "q_init",
-    text: "Preparing your resume-tailored question...",
-    competency: "Career & Project Ownership",
-    difficulty: diffParam,
-    type: "Behavioral",
-    durationSec: 150,
-  });
+  // Do not use a candidate-visible placeholder as a question. The first
+  // question is generated before the interview surface is rendered.
+  const [question, setQuestion] = useState<any>(null);
 
   const [answer, setAnswer] = useState(() => (typeof window !== "undefined" ? localStorage.getItem(DRAFT_KEY) || "" : ""));
   const [mode, setMode] = useState("text");
@@ -190,7 +186,7 @@ function PracticeSessionInner() {
   }, [answer]);
 
   useEffect(() => {
-    if (result || running) return;
+    if (!question || result || running) return;
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [result, running]);
@@ -238,7 +234,7 @@ function PracticeSessionInner() {
 
   // Submit Answer -> 5-Agent Evaluation -> Next Question Decision
   const submit = async () => {
-    if (running || !answer.trim() || answer.trim().split(/\s+/).length < 10) return;
+    if (running || !question || !answer.trim() || answer.trim().split(/\s+/).length < 10) return;
     if (listening) {
       recRef.current?.stop();
       setListening(false);
@@ -312,6 +308,10 @@ function PracticeSessionInner() {
             id: `round_${Date.now()}`,
             createdAt: new Date().toISOString(),
             questionText: `${roundDef.name} interview`,
+            roundLabel: roundDef.name,
+            role: roleParam,
+            round: roundParam,
+            category: sessionCategoryForRound(roundParam),
             competency: roundParam,
             difficulty: diffParam,
             mode,
@@ -369,9 +369,12 @@ function PracticeSessionInner() {
           saveSession({
             id: `round_${Date.now()}`,
             createdAt: new Date().toISOString(),
-            questionText: `${roundDef.name} interview`, competency: roundParam, difficulty: diffParam, mode,
+            questionText: `${roundDef.name} interview`, roundLabel: roundDef.name, role: roleParam, round: roundParam, category: sessionCategoryForRound(roundParam), competency: roundParam, difficulty: diffParam, mode,
             overall,
-            scores: allCompletedTurns[allCompletedTurns.length - 1]?.result?.scores || {},
+            scores: ['relevance', 'clarity', 'structure', 'completeness', 'communication'].reduce((summary, key) => {
+              summary[key] = Math.round(allCompletedTurns.reduce((sum, turn) => sum + (turn.result?.scores?.[key] || 0), 0) / Math.max(allCompletedTurns.length, 1));
+              return summary;
+            }, {} as Record<string, number>),
             strengths: Array.from(new Set(allCompletedTurns.flatMap(turn => turn.result?.strengths || []))).slice(0, 4),
             improvements: Array.from(new Set(allCompletedTurns.flatMap(turn => turn.result?.improvements || []))).slice(0, 4),
             metrics: { words: allCompletedTurns.reduce((sum, turn) => sum + (turn.result?.metrics?.words || 0), 0), fillers: allCompletedTurns.reduce((sum, turn) => sum + (turn.result?.metrics?.fillers || 0), 0) },
@@ -471,7 +474,7 @@ function PracticeSessionInner() {
   };
 
   const roundDef = INTERVIEW_ROUNDS[roundParam] || INTERVIEW_ROUNDS.behavioral;
-  const currentTopic = question.resumeTopic || resumeSession?.topicsRemaining[0] || 'Resume Experience';
+  const currentTopic = question?.resumeTopic || resumeSession?.topicsRemaining[0] || 'Resume Experience';
 
   return (
     <div ref={topRef} className="space-y-8" data-testid="practice-session-page">
@@ -494,18 +497,11 @@ function PracticeSessionInner() {
 
           <span className="chip font-mono !text-[10px]">
             Question {Math.min((resumeSession?.coreQuestionsAsked || 0) + 1, roundDef.coreQuestionCount)} of {roundDef.coreQuestionCount}
-            {question.followUp && <span className="text-terra font-semibold ml-1">· Adaptive Follow-up</span>}
-          </span>
-
-          <span className="chip !border-emerald-200 !bg-emerald-50 !text-emerald-800 font-mono !text-[10px]">
-            Topic: {currentTopic}
+            {question?.followUp && <span className="text-terra font-semibold ml-1">· Follow-up</span>}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="chip font-mono !text-[10px] hidden sm:flex">
-            Competency: <strong className="ml-1 text-ink">{question.competency || 'Core Ownership'}</strong>
-          </span>
           <span className="chip font-mono !text-[10px]">
             <Clock className="h-3 w-3 mr-1 text-mut" />
             {String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}
@@ -514,53 +510,32 @@ function PracticeSessionInner() {
       </div>
 
       {/* ======================================================== */}
-      {/* RESUME EVIDENCE CONTEXT BANNER                           */}
-      {/* ======================================================== */}
-      <div className="p-3.5 rounded-2xl border border-line bg-gradient-to-r from-cream via-white to-terrasoft/40 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-terra text-white font-mono text-[10px] font-bold shadow-sm">
-            AI
-          </span>
-          <div className="truncate text-ink2">
-            <span className="text-terra font-bold mr-1">Interviewer Context:</span>
-            <span>{question.reason || `Personalized around candidate's verified experience in ${currentTopic}.`}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="chip !border-sagesoft !bg-sagesoft !text-sage font-mono !text-[10px] flex items-center gap-1">
-            <ShieldCheck className="h-3.5 w-3.5" /> Resume Grounded
-          </span>
-        </div>
-      </div>
-
-      {/* ======================================================== */}
       {/* MAIN QUESTION & RESPONSE STAGE                           */}
       {/* ======================================================== */}
+      {!question ? (
+        <div className="mx-auto flex min-h-80 max-w-3xl items-center justify-center" aria-live="polite" aria-label="Loading interview question">
+          <div className="flex gap-2" aria-hidden="true">
+            {[0, 1, 2].map((dot) => <span key={dot} className="h-2.5 w-2.5 rounded-full bg-terra animate-pulse" style={{ animationDelay: `${dot * 140}ms` }} />)}
+          </div>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Left Column: Question & Response Area */}
         <div className="space-y-6 lg:col-span-5">
           <Reveal>
             <div className="card p-7" data-testid="question-display-card">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <p className="eyebrow">
-                  {question.competency} · {question.difficulty}
-                  {question.followUp ? ' · Adaptive Follow-up' : ''}
+                  {question.followUp ? 'Follow-up question' : 'Interview question'}
                 </p>
                 <span className="text-[10px] font-mono text-terra font-semibold">
                   Turn {turnIndex + 1}
                 </span>
               </div>
 
-              <h1 className="mt-4 font-display text-2xl leading-snug text-ink">"{question.text}"</h1>
+              <h1 className="mt-4 font-display text-3xl leading-snug text-ink sm:text-4xl">{question.text}</h1>
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                <span className="chip !border-terra/30 !bg-terrasoft/50 !text-terra font-mono !text-[10px]">
-                  Topic: {currentTopic}
-                </span>
-                {question.evidenceUsed?.map((ev: string) => (
-                  <span key={ev} className="chip font-mono !text-[10px]">{ev}</span>
-                ))}
-                <span className="chip font-mono !text-[10px]">~2 min response</span>
+              <div className="mt-5">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-mut">Take your time · aim for a clear, specific answer</span>
               </div>
             </div>
           </Reveal>
@@ -639,19 +614,12 @@ function PracticeSessionInner() {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={loadSampleAnswer}
-                    type="button"
-                    className="text-xs text-terra hover:underline font-semibold cursor-pointer"
-                  >
-                    Quick-Fill
-                  </button>
-                  <button
                     data-testid="submit-response-btn"
                     onClick={submit}
                     disabled={running || words < 10}
                     className="btn-terra !px-5 !py-2.5 disabled:opacity-40 cursor-pointer"
                   >
-                    {running ? "Preparing next question…" : "Submit answer"} {!running && <ArrowRight className="h-4 w-4" />}
+                    {running ? "Submitting…" : "Submit answer"} {!running && <ArrowRight className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
@@ -659,21 +627,21 @@ function PracticeSessionInner() {
           </Reveal>
         </div>
 
-        {/* Right Column: 5-Agent Stepper & Dynamic Feedback */}
         <div className="lg:col-span-7">
           <Reveal delay={0.05}>
-            <div className="card p-7" data-testid="feedback-card">
+            <div className="card p-6 sm:p-7" data-testid="feedback-card" aria-live="polite">
               <AgentStepper stages={stages} />
-
-              {!running && (
-                <div className="py-16 text-center text-xs text-mut" data-testid="feedback-empty-state">
-                  <Sparkles className="mx-auto mb-3 h-6 w-6 text-terra/60 animate-pulse" />
-                  <p className="font-display text-lg text-ink">AI Interviewer is listening.</p>
-                  <p className="mt-1 text-ink2 max-w-sm mx-auto">
-                    Your answers are assessed internally to guide the next question. Your full coaching report arrives when this round is complete.
-                  </p>
-                </div>
-              )}
+              <div className="mt-5 border-t border-line pt-4 text-center">
+                {running ? (
+                  <p className="text-xs text-ink2">Reviewing your response. Your next question will appear automatically.</p>
+                ) : (
+                  <p className="text-xs text-mut" data-testid="feedback-empty-state">Waiting for your answer...</p>
+                )}
+              </div>
+            </div>
+          </Reveal>
+        </div>
+        <div className="hidden">
               {/* Detailed coaching stays out of the interview itself. The
                   consolidated report below is shown only at round completion. */}
               {false && <AnimatePresence>
@@ -770,10 +738,9 @@ function PracticeSessionInner() {
                   </motion.div>
                 )}
               </AnimatePresence>}
-            </div>
-          </Reveal>
         </div>
       </div>
+      )}
 
       {/* ======================================================== */}
       {/* ROUND SUMMARY & RECOMMENDATIONS (PRD 17) / FULL MOCK (PRD 19) */}

@@ -9,7 +9,17 @@ import { CommunicationAnalysisAgent } from '@/agents/communicationAnalysisAgent'
 import { StarStructureAgent } from '@/agents/starStructureAgent';
 import { InterviewCoachAgent } from '@/agents/interviewCoachAgent';
 import { runEvaluation } from '@/lib/coachEngine';
+import { MultiAgentPipeline } from '@/agents/multiAgentPipeline';
+import { evaluateSemanticallyWithLLM } from '@/server/evaluation/semanticEvaluator';
+import { calculateOverallScore, isValidScoreSet } from '@/lib/interview/scoring';
 import type { ResumeKnowledgeModel } from '@/lib/resume/resumeKnowledge';
+import { buildEvidenceGraph, extractResumeKnowledge } from '@/lib/resume/resumeKnowledge';
+import { chooseEvidence, isGroundedQuestion, isSemanticDuplicate } from '@/lib/interview/evidenceGuard';
+import { createEmptyProfile } from '@/lib/api';
+import { enhanceSpecialistWithLLM } from '@/server/evaluation/specialistEvaluators';
+import { deriveReviewWeaknesses, sessionRoadmap } from '@/lib/sessionReview';
+import { filterSessions, SESSION_FILTERS, sessionFilterCategories, sessionMatchesFilter } from '@/lib/sessionFilters';
+import { POST as runBenchmark } from '@/app/api/benchmark/run/route';
 
 const knowledge: ResumeKnowledgeModel = {
   candidate: { name: 'Test Candidate', email: 'candidate@example.com', phone: '', location: '', summary: '' },
@@ -50,6 +60,34 @@ test('HR introduction stays focused on career story and role motivation', async 
   assert.equal(result.nextQuestion.round, 'hr');
   assert.match(result.nextQuestion.question, /introduce yourself|career/i);
   assert.doesNotMatch(result.nextQuestion.question, /architecture|technical decision|project from your resume/i);
+});
+
+test('deterministic follow-ups include verified prior-question context and avoid vague references', () => {
+  const state = initializeSessionState(knowledge, 'behavioral', 'swe');
+  state.history.push({
+    turnIndex: 1,
+    coreQuestionIndex: 1,
+    isFollowUp: false,
+    answer: 'Our team delivered the dashboard successfully.',
+    question: {
+      question: 'Tell me about the Revenue dashboard project.', questionType: 'behavioral', round: 'behavioral',
+      competency: 'Ownership', difficulty: 'Standard', source: 'resume', resumeTopic: 'Revenue dashboard',
+      reason: 'Resume evidence', expectedCompetency: 'Ownership', followUp: false, evidenceUsed: ['Revenue dashboard'],
+    },
+  });
+
+  const followUp = ResumeInterviewerAgent.generateFallbackQuestion(state, true, state.history[0].answer);
+  assert.equal(followUp.followUp, true);
+  assert.match(followUp.question, /Revenue dashboard/);
+  assert.doesNotMatch(followUp.question, /that initiative|that project|what the team delivered|as you mentioned|that experience|that effort|that implementation/i);
+  assert.doesNotMatch(followUp.question, /MinuteMind/i);
+});
+
+test('follow-up generation uses a fresh core question when no verified context exists', () => {
+  const state = initializeSessionState(knowledge, 'behavioral', 'swe');
+  const question = ResumeInterviewerAgent.generateFallbackQuestion(state, true, 'We improved the result but I cannot provide details.');
+  assert.equal(question.followUp, false);
+  assert.match(question.question, /Revenue dashboard/);
 });
 
 test('a short non-answer cannot receive a passing evaluation', async () => {
@@ -94,4 +132,261 @@ test('HR evaluation uses career-fit criteria instead of forcing STAR evidence', 
 
   assert.ok(result.scores.structure >= 35, 'HR answers should be evaluated for organization, not missing STAR sections');
   assert.ok(result.scores.relevance > 40);
+});
+
+const hybridQuestion: any = {
+  id: 'hybrid_test', question: 'Describe a production incident you resolved and its outcome.', role: 'swe',
+  competency: 'behavioral', difficulty: 'Standard', questionType: 'Behavioral',
+  expectedCompetency: 'Incident ownership', evaluationCriteria: ['Context', 'Action', 'Result'],
+  focus: [], durationSec: 150, expectSTAR: true,
+  modelPoints: ['Describe the incident context', 'Explain your personal action', 'State the measurable outcome'],
+  modelAnswer: '', followUps: [],
+};
+const hybridAnswer = 'During a checkout incident, I was responsible for restoring service. I rolled back the faulty release, added a database index, and monitored recovery. The change reduced errors by 82% and restored customers within 12 minutes.';
+
+test('semantic evaluator accepts valid LLM JSON scores', async () => {
+  const scores = await evaluateSemanticallyWithLLM({
+    question: hybridQuestion,
+    answer: hybridAnswer,
+    objectiveSignals: { words: 35, fillers: 0 },
+  }, async () => ({ choices: [{ message: { content: JSON.stringify({ relevance: 91, clarity: 84, structure: 88, completeness: 86, communication: 83 }) } }] }) as any);
+
+  assert.deepEqual(scores, { relevance: 91, clarity: 84, structure: 88, completeness: 86, communication: 83 });
+});
+
+test('semantic evaluator rejects invalid LLM JSON and invalid score sets', async () => {
+  await assert.rejects(() => evaluateSemanticallyWithLLM({ question: hybridQuestion, answer: hybridAnswer, objectiveSignals: {} }, async () => ({ choices: [{ message: { content: 'not json' } }] }) as any));
+  assert.equal(isValidScoreSet({ relevance: 101, clarity: 80, structure: 80, completeness: 80, communication: 80 }), false);
+  assert.equal(isValidScoreSet({ relevance: 80, clarity: 80, structure: 80, completeness: 80, communication: 80 }), true);
+});
+
+test('hybrid pipeline falls back deterministically when the semantic API fails', async () => {
+  const result = await MultiAgentPipeline.execute({
+    question: hybridQuestion,
+    answer: hybridAnswer,
+    mode: 'text',
+    semanticEvaluator: async () => { throw new Error('provider timeout'); },
+  });
+
+  assert.equal(result.evaluationSource, 'deterministic_fallback');
+  assert.equal(result.overall, calculateOverallScore(result.scores));
+});
+
+test('pipeline reports real parallel specialist fallback states before coach synthesis', async () => {
+  const events: Array<{ id: string; status: string }> = [];
+  await MultiAgentPipeline.execute({
+    question: hybridQuestion,
+    answer: hybridAnswer,
+    mode: 'text',
+  }, (id, status) => events.push({ id, status }));
+
+  const firstCoachRunning = events.findIndex((event) => event.id === 'coach' && event.status === 'running');
+  assert.ok(firstCoachRunning > -1);
+  for (const id of ['comm', 'content', 'star']) {
+    assert.ok(events.findIndex((event) => event.id === id && event.status === 'running') > -1, `${id} starts`);
+    assert.ok(events.findIndex((event) => event.id === id && event.status === 'fallback') > -1, `${id} exposes deterministic fallback`);
+    assert.ok(events.findIndex((event) => event.id === id && event.status === 'fallback') < firstCoachRunning, `${id} completes before coach synthesis`);
+  }
+});
+
+test('pipeline reports completed specialist states when LLM enhancement succeeds', async () => {
+  const events: Array<{ id: string; status: string }> = [];
+  await MultiAgentPipeline.execute({
+    question: hybridQuestion,
+    answer: hybridAnswer,
+    mode: 'text',
+    specialistEvaluator: async (_kind, _context, deterministic) => ({
+      output: { ...deterministic, evaluationSource: 'llm' },
+      evaluationSource: 'llm' as const,
+    }),
+  }, (id, status) => events.push({ id, status }));
+
+  for (const id of ['comm', 'content', 'star']) {
+    assert.ok(events.some((event) => event.id === id && event.status === 'done'), `${id} completes with LLM enhancement`);
+    assert.equal(events.some((event) => event.id === id && event.status === 'fallback'), false);
+  }
+});
+
+test('both hybrid paths use identical deterministic final weighting', async () => {
+  const llmScores = { relevance: 90, clarity: 80, structure: 88, completeness: 84, communication: 86 };
+  const result = await MultiAgentPipeline.execute({
+    question: hybridQuestion,
+    answer: hybridAnswer,
+    mode: 'text',
+    semanticEvaluator: async () => llmScores,
+  });
+
+  assert.equal(result.evaluationSource, 'llm');
+  assert.deepEqual(result.scores, llmScores);
+  assert.equal(result.overall, calculateOverallScore(llmScores));
+});
+
+test('session review shows no artificial weakness for a strong persisted answer', () => {
+  const result = {
+    scores: { relevance: 91, clarity: 86, structure: 90, completeness: 84, communication: 88 },
+    metrics: { fillers: 0, hedges: 0 },
+    star: { situation: { detected: true }, task: { detected: true }, action: { detected: true }, result: { detected: true } },
+    improvements: [],
+  };
+  assert.deepEqual(deriveReviewWeaknesses(result), []);
+});
+
+test('session review aggregates only persisted weak signals into the improvement roadmap', () => {
+  const weakResult = {
+    scores: { relevance: 82, clarity: 80, structure: 58, completeness: 62, communication: 75 },
+    metrics: { fillers: 4, hedges: 0 },
+    star: {
+      situation: { detected: true }, task: { detected: true }, action: { detected: true },
+      result: { detected: false, evidence: 'No measurable outcome stated.' },
+    },
+    evidenceHighlights: [{ dimension: 'Content Rigor', coachingNote: 'Omitted key criteria: "State the measurable outcome".' }],
+    improvements: ['Land every story on a quantified Result.', 'Trim filler words (4 detected).'],
+  };
+  const weaknesses = deriveReviewWeaknesses(weakResult);
+  assert.ok(weaknesses.some((item) => item.key === 'results'));
+  assert.ok(weaknesses.some((item) => item.key === 'fillers'));
+  assert.ok(sessionRoadmap([{ result: weakResult }, { result: weakResult }]).some((item) => item.key === 'results' && item.count === 2));
+});
+
+test('session filters map every completed round and legacy competency without mutating records', () => {
+  const sessions = [
+    { id: 'hr', questionText: 'Round 1 — HR & Introduction interview', round: 'hr' },
+    { id: 'behavioral', questionText: 'Round 2 — Behavioral & STAR interview', competency: 'behavioral' },
+    { id: 'technical', questionText: 'Round 3 — Technical & Domain Knowledge interview', competency: 'technical' },
+    { id: 'situational', questionText: 'Round 4 — Situational & Problem Solving interview', stage: 'System Design & Scenarios' },
+    { id: 'leadership', questionText: 'Round 5 — Leadership & Ownership interview', round: 'leadership' },
+    { id: 'communication', questionText: 'Explain a technical concept', category: 'Technical Communication' },
+    { id: 'customer', questionText: 'Customer escalation', competency: 'customer' },
+    { id: 'mock', questionText: 'Round 6 — Full Comprehensive Mock interview', round: 'mock' },
+  ];
+  const before = JSON.stringify(sessions);
+  assert.deepEqual(filterSessions(sessions, 'all').map((session) => session.id), sessions.map((session) => session.id));
+  assert.deepEqual(filterSessions(sessions, 'hr').map((session) => session.id), ['hr']);
+  assert.deepEqual(filterSessions(sessions, 'behavioral').map((session) => session.id), ['behavioral']);
+  assert.deepEqual(filterSessions(sessions, 'technical').map((session) => session.id), ['technical']);
+  assert.deepEqual(filterSessions(sessions, 'problem').map((session) => session.id), ['situational']);
+  assert.deepEqual(filterSessions(sessions, 'leadership').map((session) => session.id), ['leadership']);
+  assert.deepEqual(filterSessions(sessions, 'tech-comm').map((session) => session.id), ['communication']);
+  assert.deepEqual(filterSessions(sessions, 'customer').map((session) => session.id), ['customer']);
+  assert.deepEqual(filterSessions(sessions, 'mock').map((session) => session.id), ['mock']);
+  assert.equal(JSON.stringify(sessions), before);
+});
+
+test('technical completed sessions filter by their round/category and compose with search', () => {
+  const technical = { id: 'technical-round', questionText: 'Round 3 — Technical & Domain Knowledge interview', round: 'technical', category: 'technical' };
+  assert.equal(sessionMatchesFilter(technical, 'technical'), true);
+  assert.equal(sessionMatchesFilter(technical, 'tech-comm'), false);
+  assert.deepEqual(sessionFilterCategories(technical), ['technical']);
+  assert.deepEqual(filterSessions([technical], 'technical', 'domain knowledge').map((session) => session.id), ['technical-round']);
+  assert.deepEqual(filterSessions([technical], 'technical', 'behavioral'), []);
+});
+
+test('sessions exposes only current interview-round filters, while preserving legacy records in All', () => {
+  assert.equal(SESSION_FILTERS.some((filter) => filter.id === 'tech-comm'), false);
+  assert.equal(SESSION_FILTERS.some((filter) => filter.id === 'customer'), false);
+  assert.deepEqual(filterSessions([{ id: 'legacy', questionText: 'Explain a technical concept', competency: 'tech-comm' }], 'all').map((session) => session.id), ['legacy']);
+});
+
+test('evidence graph never attaches global skills to unrelated education or work evidence', () => {
+  const profile = createEmptyProfile();
+  profile.technicalSkills = ['Python', 'PostgreSQL'];
+  profile.technologies = ['Python', 'PostgreSQL'];
+  profile.education = [{ institution: 'Example University', degree: 'B.Com', year: '2024' }];
+  profile.workExperience = [{ company: 'Retail Co', role: 'Analyst', duration: '2023', summary: 'Prepared weekly reports.' }];
+  profile.projects = [{ name: 'Inventory API', summary: 'Built an API.', technologies: ['Python'] }];
+  const evidence = buildEvidenceGraph(profile);
+  assert.deepEqual(evidence.find(e => e.topic === 'Example University')?.technologies, []);
+  assert.deepEqual(evidence.find(e => e.topic === 'Retail Co')?.technologies, []);
+  assert.deepEqual(evidence.find(e => e.topic === 'Inventory API')?.technologies, ['Python']);
+});
+
+test('technical fallback does not turn education into an architecture project', () => {
+  const educationOnly: ResumeKnowledgeModel = {
+    ...knowledge,
+    education: [{ institution: 'Example University', degree: 'BSc Computer Science', year: '2024' }],
+    evidenceGraph: [{ id: 'edu_1', topic: 'Example University', category: 'education', facts: ['Studied at Example University: BSc Computer Science (2024)'], skills: [], technologies: [], metrics: [], responsibilities: [], achievements: [], potentialCompetencies: [], source: 'resume', covered: false, timesExplored: 0 }],
+  };
+  const q = ResumeInterviewerAgent.generateFallbackQuestion(initializeSessionState(educationOnly, 'technical', 'swe'), false);
+  assert.match(q.question, /coursework|foundation|concept/i);
+  assert.doesNotMatch(q.question, /architecture|implemented|database|API/i);
+});
+
+test('grounding validator rejects an LLM question that combines a university with another project technology', () => {
+  const university: any = { id: 'edu', topic: 'Example University', category: 'education', facts: ['BSc'], skills: [], technologies: [], metrics: [], responsibilities: [], achievements: [], potentialCompetencies: [], source: 'resume', covered: false, timesExplored: 0 };
+  const project: any = { id: 'project', topic: 'Inventory API', category: 'project', facts: ['Built Inventory API'], skills: ['Python'], technologies: ['Python'], metrics: [], responsibilities: [], achievements: [], potentialCompetencies: [], source: 'resume', covered: false, timesExplored: 0 };
+  assert.equal(isGroundedQuestion('At Example University, explain the Python architecture you designed.', university, [university, project], 'technical'), false);
+  assert.equal(isGroundedQuestion('On Inventory API, what requirement led you to use Python?', project, [university, project], 'technical'), true);
+});
+
+test('adaptive follow-up uses the latest answer gap and remains self-contained', () => {
+  const k: ResumeKnowledgeModel = { ...knowledge, evidenceGraph: [{ ...knowledge.evidenceGraph[0], technologies: ['Flask', 'PostgreSQL'] }] };
+  const state = initializeSessionState(k, 'technical', 'swe');
+  state.history.push({ turnIndex: 1, coreQuestionIndex: 1, isFollowUp: false, answer: 'I built the backend using Flask and PostgreSQL.', question: { question: 'On Revenue dashboard, how did you implement the backend?', questionType: 'technical', round: 'technical', competency: 'Implementation', difficulty: 'Standard', source: 'resume', resumeTopic: 'Revenue dashboard', reason: 'Resume evidence', expectedCompetency: 'Technical depth', followUp: false, evidenceUsed: ['Revenue dashboard'], evidenceItemId: 'project_1' } });
+  const q = ResumeInterviewerAgent.generateFallbackQuestion(state, true, state.history[0].answer);
+  assert.equal(q.followUp, true);
+  assert.match(q.question, /Revenue dashboard.*PostgreSQL/i);
+  assert.match(q.question, /requirement|trade-off/i);
+  assert.doesNotMatch(q.question, /that approach|that project|as you mentioned/i);
+});
+
+test('semantic duplicate protection and intent tracking prevent repeated templates', () => {
+  assert.equal(isSemanticDuplicate('On Inventory API, what requirement led you to use Python?', ['On Inventory API, what requirement led you to use Python?']), true);
+  const state = initializeSessionState(knowledge, 'technical', 'swe');
+  state.askedIntents = ['implementation'];
+  const q = ResumeInterviewerAgent.generateFallbackQuestion(state, false);
+  assert.notEqual(q.intent, 'implementation');
+});
+
+test('certifications are classified separately and technical fallback stays role-knowledge appropriate', () => {
+  const profile = createEmptyProfile();
+  profile.certifications = ['Cloud Fundamentals Certificate'];
+  const model = extractResumeKnowledge(profile);
+  assert.equal(model.evidenceGraph[0].category, 'certification');
+  const q = ResumeInterviewerAgent.generateFallbackQuestion(initializeSessionState(model, 'technical', 'devops'), false);
+  assert.match(q.question, /practical knowledge|apply/i);
+  assert.doesNotMatch(q.question, /architecture|scalab/i);
+});
+
+test('insufficient resume evidence uses a curated round-appropriate fallback', () => {
+  const empty: ResumeKnowledgeModel = { ...knowledge, evidenceGraph: [] };
+  const q = ResumeInterviewerAgent.generateFallbackQuestion(initializeSessionState(empty, 'technical', 'swe'), false);
+  assert.equal(q.source, 'role_standard');
+  assert.equal(q.resumeTopic, 'Role-standard question');
+  assert.equal(q.followUp, false);
+});
+
+test('generic technical skill clusters can never become implementation projects', () => {
+  const skillsOnly: ResumeKnowledgeModel = {
+    ...knowledge,
+    evidenceGraph: [{ id: 'skills_tech_core', topic: 'Core Technical Stack', category: 'skill', facts: ['Primary technical capabilities: TypeScript, SQL'], skills: ['TypeScript', 'SQL'], technologies: ['TypeScript', 'SQL'], metrics: [], responsibilities: ['Technical implementation and architecture'], achievements: [], potentialCompetencies: ['Technical Depth'], source: 'resume', covered: false, timesExplored: 0 }],
+  };
+  const state = initializeSessionState(skillsOnly, 'technical', 'swe');
+  assert.equal(chooseEvidence(state.evidenceGraph, 'technical'), undefined);
+  const question = ResumeInterviewerAgent.generateFallbackQuestion(state, false);
+  assert.equal(question.source, 'role_standard');
+  assert.doesNotMatch(question.question, /Core Technical Stack/i);
+  assert.equal(isGroundedQuestion('On Core Technical Stack, how did you evaluate performance?', skillsOnly.evidenceGraph[0], skillsOnly.evidenceGraph, 'technical'), false);
+});
+
+test('specialist semantic evaluator validates LLM JSON and retains deterministic fallback per agent', async () => {
+  const deterministic: any = { clarity: 51, conciseness: 50, communication_quality: 52, filler_words: 2, hedging: 1, wpm: null, avg_sentence_len: 12, word_count: 40, confidence_score: 50, strengths: [], improvements: [], evidence: [], detailedFillersDetected: [], tone: 'Clear & Structured' };
+  const success = await enhanceSpecialistWithLLM('communication', { answer: 'A clear answer.' }, deterministic, async () => ({ choices: [{ message: { content: JSON.stringify({ clarity: 82, conciseness: 76, communication_quality: 80, tone: 'Professional & Confident' }) } }] }) as any);
+  assert.equal(success.evaluationSource, 'llm');
+  assert.equal(success.output.clarity, 82);
+  assert.equal(success.output.filler_words, 2, 'objective signal remains deterministic');
+  const malformed = await enhanceSpecialistWithLLM('communication', { answer: 'A clear answer.' }, deterministic, async () => ({ choices: [{ message: { content: '{bad json' } }] }) as any);
+  assert.equal(malformed.evaluationSource, 'deterministic_fallback');
+  assert.equal(malformed.output.clarity, 51);
+  assert.equal(malformed.fallbackReason?.code, 'invalid_json');
+});
+
+test('benchmark API rejects an unknown case instead of serializing NaN aggregates', async () => {
+  const response = await runBenchmark(new Request('http://localhost/api/benchmark/run', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ testCaseId: 'missing-case' }),
+  }) as any);
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: 'Benchmark test case was not found.' });
 });

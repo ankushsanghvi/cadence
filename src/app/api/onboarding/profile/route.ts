@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeResumeProfile } from '@/lib/resumeParser';
+import type { CandidateProfile } from '@/lib/api';
 
 // In-memory server profile store for the current session
-let currentServerProfile: any = null;
+let currentServerProfile: CandidateProfile | null = null;
 
 export async function GET() {
   return NextResponse.json({
@@ -20,7 +21,7 @@ export async function PUT(req: NextRequest) {
       status: 'ok',
       profile: currentServerProfile,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to update profile' }, { status: 400 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to update profile' }, { status: 400 });
   }
 }

@@ -1,9 +1,9 @@
 import { CandidateProfile } from '@/lib/api';
-import { StructuredQuestion } from '@/lib/dataset/datasetManager';
 import { CommunicationAgentOutput } from './communicationAnalysisAgent';
 import { ContentAgentOutput } from './contentEvaluationAgent';
 import { StarAgentOutput } from './starStructureAgent';
 import { QuestionAgentOutput } from './interviewQuestionAgent';
+import { applyScoreGuardrails, calculateOverallScore, verdictForScore } from '@/lib/interview/scoring';
 
 export interface CoachAgentInput {
   candidateProfile: CandidateProfile | null;
@@ -59,37 +59,14 @@ Generate an overall score, evidence-grounded strengths and weaknesses, an improv
       communication: commOutput.communication_quality,
     };
 
-    let overallScore = Math.round(
-      dimensionScores.relevance * 0.20 +
-      dimensionScores.clarity * 0.20 +
-      dimensionScores.structure * 0.25 +
-      dimensionScores.completeness * 0.15 +
-      dimensionScores.communication * 0.20
-    );
-
-    // Guardrails prevent fluent non-answers from receiving a passing overall
-    // score merely because they are concise or contain no fillers.
-    const normalizedResponse = candidateResponse.trim().toLowerCase();
-    const isExplicitNonAnswer = /\b(i don'?t know|no idea|cannot answer|can'?t answer|not sure|idk|whatever|nothing to say)\b/.test(normalizedResponse);
-    if (isExplicitNonAnswer || commOutput.word_count < 12) {
-      overallScore = Math.min(overallScore, 25);
-    } else if (!contentOutput.answered_prompt || contentOutput.key_points_covered.length === 0) {
-      overallScore = Math.min(overallScore, 52);
-    } else if (contentOutput.key_points_covered.length === 1 && contentOutput.completeness < 45) {
-      overallScore = Math.min(overallScore, 60);
-    }
-
-    // Verdict
-    let verdict = "";
-    if (overallScore >= 85) {
-      verdict = "Panel-ready — structured, specific, and technically confident.";
-    } else if (overallScore >= 72) {
-      verdict = "Strong response with good technical bones. Tighten the conclusion with quantifiable metrics.";
-    } else if (overallScore >= 58) {
-      verdict = "Promising direction, but narrative structure and empirical evidence need calibration.";
-    } else {
-      verdict = "Needs substantial reinforcement. Focus on first-person ownership and concrete technical actions.";
-    }
+    const overallScore = applyScoreGuardrails(calculateOverallScore(dimensionScores), {
+      answer: candidateResponse,
+      wordCount: commOutput.word_count,
+      answeredPrompt: contentOutput.answered_prompt,
+      coveredPointCount: contentOutput.key_points_covered.length,
+      completeness: contentOutput.completeness,
+    });
+    const verdict = verdictForScore(overallScore);
 
     // Consolidate Strengths
     const strengths: string[] = [];
@@ -154,7 +131,7 @@ Generate an overall score, evidence-grounded strengths and weaknesses, an improv
     // Improved Model Answer
     let improvedAnswer = q.modelAnswer;
     if (!improvedAnswer) {
-      improvedAnswer = `Situation: When our production services experienced scaling bottlenecks under heavy load, Task: I was responsible for diagnosing the latency degradation and delivering a resilient fix before the client release. Action: I built an empirical benchmark, identified the thread pool deadlock, refactored our asynchronous worker queues, and implemented automated retry backoffs. Result: The new architecture reduced p99 latency by 54% and passed all client load tests with zero errors.`;
+      improvedAnswer = `A stronger answer would clearly state the real situation, your personal actions, and the evidence you used to evaluate the outcome, without adding facts that were not part of your experience.`;
     }
 
     // Model Checklist Hit Points
@@ -164,34 +141,18 @@ Generate an overall score, evidence-grounded strengths and weaknesses, an improv
 
     // Generate Personalized Response-Dependent Follow-Up Questions
     const followUpQuestions: string[] = [];
-
-    // Gaps-driven followups:
-    if (starOutput.result.status === 'missing' || starOutput.result.status === 'weak') {
-      followUpQuestions.push("You described the technical changes, but what was the exact quantifiable metric or percentage improvement achieved?");
-    }
-    if (starOutput.action.status === 'weak') {
-      followUpQuestions.push("You mentioned 'we worked on the solution' — what was the specific component you personally architected or coded?");
-    }
-    if (contentOutput.metrics_cited.length === 0) {
-      followUpQuestions.push("If executive leadership asked for the financial or customer ROI of that decision, what number would you share?");
-    }
-
-    // Domain & response-driven followups:
     const lowerResp = candidateResponse.toLowerCase();
-    if (lowerResp.includes("kafka") || lowerResp.includes("queue") || lowerResp.includes("stream")) {
-      followUpQuestions.push("If that event queue experienced sudden consumer lag spikes, how would your partition telemetry auto-scale?");
-    } else if (lowerResp.includes("database") || lowerResp.includes("sql") || lowerResp.includes("postgres")) {
-      followUpQuestions.push("How did you ensure database read-replica consistency and prevent stale queries during that traffic spike?");
-    } else if (lowerResp.includes("microservice") || lowerResp.includes("api") || lowerResp.includes("service")) {
-      followUpQuestions.push("What failover circuit breaker pattern did you implement to isolate upstream dependency failures?");
+    // One drill only, derived from a gap in this answer. Do not turn a keyword
+    // into an invented architecture, metric, or responsibility.
+    if ((starOutput.result.status === 'missing' || starOutput.result.status === 'weak') && /\b(improved|reduced|increased|faster|saved|scaled)\b/i.test(candidateResponse)) {
+      followUpQuestions.push('You described an improvement. How did you measure it, and what was the before-and-after result?');
+    } else if (starOutput.action.status === 'weak' && /\b(we|our team)\b/i.test(candidateResponse) && !/\b(i |my |personally)\b/i.test(candidateResponse)) {
+      followUpQuestions.push('You described a team effort. Which specific responsibility did you personally own, and what did you do?');
     } else {
-      followUpQuestions.push("What was the biggest technical risk or alternative approach you considered and ultimately discarded?");
-    }
-
-    // Merge with preset followups if needed
-    for (const f of q.followUps) {
-      if (!followUpQuestions.includes(f) && followUpQuestions.length < 3) {
-        followUpQuestions.push(f);
+      const mentionedTechnology = ['postgresql', 'postgres', 'sql', 'kafka', 'queue', 'stream', 'api', 'microservice']
+        .find(term => lowerResp.includes(term));
+      if (mentionedTechnology && candidateResponse.trim().split(/\s+/).length < 80) {
+        followUpQuestions.push(`You mentioned ${mentionedTechnology}. What requirement or trade-off led you to use it?`);
       }
     }
 

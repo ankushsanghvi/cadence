@@ -8,7 +8,6 @@ import Marquee from "@/features/landing/components/Marquee";
 import AgentShowcase from "@/features/landing/components/AgentShowcase";
 import Bento from "@/features/landing/components/Bento";
 import PracticeDemo from "@/features/landing/components/PracticeDemo";
-import Method from "@/features/landing/components/Method";
 import Footer from "@/features/landing/components/Footer";
 
 export default function Landing() {
@@ -35,7 +34,6 @@ export default function Landing() {
         <AgentShowcase />
         <Bento />
         <PracticeDemo />
-        <Method />
       </main>
       <Footer />
     </div>

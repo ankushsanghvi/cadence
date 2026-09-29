@@ -1,9 +1,9 @@
-// @ts-nocheck
 'use client';
 
 import { motion } from "framer-motion";
+import type { ReactNode } from 'react';
 
-export const Reveal = ({ children, delay = 0, className = "", y = 24 }: any) => (
+export const Reveal = ({ children, delay = 0, className = "", y = 24 }: { children: ReactNode; delay?: number; className?: string; y?: number }) => (
   <motion.div
     className={className}
     initial={{ opacity: 0, y }}
@@ -15,14 +15,14 @@ export const Reveal = ({ children, delay = 0, className = "", y = 24 }: any) => 
   </motion.div>
 );
 
-export const SectionTag = ({ children, dark = false }: any) => (
+export const SectionTag = ({ children, dark = false }: { children: ReactNode; dark?: boolean }) => (
   <p className={`eyebrow flex items-center gap-2 ${dark ? "text-coal3" : ""}`}>
     <span className={`h-px w-8 ${dark ? "bg-coal3" : "bg-terra"}`} />
     {children}
   </p>
 );
 
-export const ScoreRing = ({ value, size = 120, stroke = 9, label = "Overall", testid }: any) => {
+export const ScoreRing = ({ value, size = 120, stroke = 9, label = "Overall", testid }: { value: number; size?: number; stroke?: number; label?: string; testid?: string }) => {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   return (
@@ -51,7 +51,7 @@ export const ScoreRing = ({ value, size = 120, stroke = 9, label = "Overall", te
   );
 };
 
-export const ScoreBar = ({ label, value, weight, delay = 0 }: any) => (
+export const ScoreBar = ({ label, value, weight, delay = 0 }: { label: string; value: number; weight?: number; delay?: number }) => (
   <div data-testid={`score-bar-${label.toLowerCase().replace(/\s+/g, "-")}`}>
     <div className="mb-1.5 flex items-baseline justify-between">
       <span className="text-sm font-medium text-ink2">

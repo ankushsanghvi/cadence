@@ -79,7 +79,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main Content Area */}
-        <div className="flex-1 lg:pl-64">
+        <div className="min-w-0 flex-1 lg:pl-64">
           <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-line glass px-5 py-3 lg:hidden">
             <Link to="/"><Logo /></Link>
             <Link to="/app/practice" className="btn-terra !px-4 !py-2 !text-xs" data-testid="mobile-new-practice-btn">

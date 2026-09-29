@@ -4,7 +4,7 @@ import fs from 'fs';
 import { pathToFileURL } from 'url';
 import zlib from 'zlib';
 import { executeChatCompletion } from '@/server/ai/llmClient';
-import { extractSkillsFromText, parseResumeText, normalizeResumeProfile } from '@/lib/resumeParser';
+import { parseResumeText, normalizeResumeProfile } from '@/lib/resumeParser';
 import { CandidateProfile } from '@/lib/api';
 
 // A candidate can always review and edit a deterministic profile. Do not make
@@ -77,7 +77,7 @@ async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<
         let pageText = '';
         for (const item of content.items) {
           if ('str' in item) {
-            const itemObj = item as any;
+            const itemObj = item as { transform: number[]; str: string };
             if (lastY !== null && Math.abs(itemObj.transform[5] - lastY) > 4) {
               pageText += '\n';
             } else if (pageText.length > 0 && !pageText.endsWith(' ') && !pageText.endsWith('\n')) {
@@ -264,6 +264,7 @@ Do NOT wrap the output in markdown codeblocks. Output raw valid JSON only.`;
         responseFormat: 'json_object',
         timeoutMs: PROFILE_AI_TIMEOUT_MS,
         maxRetries: 0,
+        traceName: 'Resume/Profile Extraction',
       });
 
       const rawContent = completion.choices[0]?.message?.content || '';
@@ -288,9 +289,9 @@ Do NOT wrap the output in markdown codeblocks. Output raw valid JSON only.`;
         source = 'ai';
         console.log(`[Resume] AI parser succeeded`);
       }
-    } catch (llmError: any) {
+    } catch (llmError: unknown) {
       // Section 11: LLM error must not break onboarding; fall back to deterministic parser
-      console.warn(`[Resume] LLM extraction error (${llmError?.message || llmError}), activating deterministic fallback parser`);
+      console.warn(`[Resume] LLM extraction error (${llmError instanceof Error ? llmError.message : String(llmError)}), activating deterministic fallback parser`);
     }
 
     // 2. Deterministic Heuristic Fallback (Section 12)
@@ -333,8 +334,8 @@ Do NOT wrap the output in markdown codeblocks. Output raw valid JSON only.`;
       source,
       diagnostic,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Resume] Error processing resume upload:', error);
-    return NextResponse.json({ error: error.message || 'Failed to process resume' }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to process resume' }, { status: 500 });
   }
 }

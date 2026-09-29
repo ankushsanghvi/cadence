@@ -1,12 +1,12 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { InterviewSessionState, InterviewerQuestionOutput, ResumeInterviewerAgent } from '@/agents/resumeInterviewerAgent';
+import { InterviewSessionState, InterviewerQuestionOutput, ResumeInterviewerAgent, type InterviewEvaluation } from '@/agents/resumeInterviewerAgent';
 import { InterviewController } from './controller';
 import { traceInterviewRun } from './tracing';
 
 const InterviewGraphState = Annotation.Root({
   sessionState: Annotation<InterviewSessionState>,
   lastAnswer: Annotation<string | undefined>,
-  lastEvaluation: Annotation<unknown | undefined>,
+  lastEvaluation: Annotation<InterviewEvaluation | undefined>,
   nextQuestion: Annotation<InterviewerQuestionOutput | undefined>,
   complete: Annotation<boolean>,
 });

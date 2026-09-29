@@ -1,5 +1,5 @@
-// @ts-nocheck
 const KEY = "cadence_sessions_v1";
+export type StoredSession = { id: string; createdAt: string; overall: number; starFilled?: number; metrics?: { fillers?: number; hedges?: number; words?: number }; scores?: { structure?: number }; star?: { result?: { detected?: boolean } }; [key: string]: unknown };
 
 function storageKey() {
   if (typeof window === "undefined") return KEY;
@@ -11,11 +11,12 @@ function storageKey() {
   }
 }
 
-export function loadSessions() {
+export function loadSessions(): StoredSession[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(storageKey());
-    return raw ? JSON.parse(raw) : [];
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed as StoredSession[] : [];
   } catch {
     return [];
   }
@@ -27,7 +28,7 @@ export function clearSessions() {
   }
 }
 
-export function saveSession(session) {
+export function saveSession(session: StoredSession) {
   const list = loadSessions().filter((s) => s.id !== session.id);
   list.unshift(session);
   if (typeof window !== "undefined") {
@@ -38,11 +39,10 @@ export function saveSession(session) {
 
 export function profile(sessions = loadSessions()) {
   if (!sessions.length) return { index: 0, avg: 0, starRate: 0, streak: 0, trend: [], gaps: [], weekCount: 0 };
-  const sorted = [...sessions].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const sorted = [...sessions].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const avg = Math.round(sorted.reduce((a, s) => a + s.overall, 0) / sorted.length);
   const last5 = sorted.slice(-5);
-  const first5 = sorted.slice(0, 5);
-  const avgOf = (l) => l.reduce((a, s) => a + s.overall, 0) / Math.max(l.length, 1);
+  const avgOf = (l: StoredSession[]) => l.reduce((a, s) => a + s.overall, 0) / Math.max(l.length, 1);
   const index = Math.round(avgOf(last5));
 
   const starRate = Math.round(
